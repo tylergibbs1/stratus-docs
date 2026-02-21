@@ -5,6 +5,23 @@ description: A TypeScript agent SDK for Azure OpenAI
 
 Stratus is a TypeScript SDK for building AI agents powered by Azure OpenAI. It provides a clean, composable API for multi-turn conversations, tool use, multi-agent handoffs, streaming, guardrails, and tracing.
 
+## Why this exists
+
+Azure OpenAI's developer experience got a lot better in August 2025 when Microsoft shipped the v1 API. You can now use the standard `OpenAI()` client from the `openai` npm package, point it at your Azure endpoint, and things mostly just work.
+
+**So why build another SDK?**
+
+Because "mostly just work" isn't good enough for production. The v1 API solved the worst pain points — no more `api-version` query strings, no more `AzureOpenAI()` client, standard method names. But there's a layer of functionality that the vanilla OpenAI SDK doesn't touch, and the gaps that remain are exactly the ones that burn you at scale:
+
+- **Tool calling requires a manual loop.** Zod schema to tool definition to model call to tool execution to response... this should be a single `run()` call with full type inference, not 80 lines of boilerplate. Stratus handles the entire [tool loop automatically](/docs/guides/agentic-tool-use) — parallel calls, multi-round execution, argument validation, error recovery.
+- **There's no agent abstraction.** The OpenAI SDK gives you `chat.completions.create()`. Building agents with instructions, tools, guardrails, handoffs, and session management on top of that is entirely on you. Stratus provides [composable agents](/docs/agents) with a clean config object.
+- **Streaming helpers are basic.** The OpenAI SDK gives you async iteration over raw chunks. Stratus gives you typed [stream events](/docs/streaming) — `content_delta`, `tool_call_start`, `tool_call_done` — with content accumulation and a final `RunResult`.
+- **Content filter errors are opaque.** Azure wraps policy violations in `inner_error.content_filter_results` but the OpenAI client throws a generic error. Stratus throws a typed [`ContentFilterError`](/docs/errors) you can catch and handle.
+- **Multi-agent orchestration doesn't exist.** [Handoffs](/docs/handoffs) between specialized agents, [subagent delegation](/docs/subagents), [guardrails](/docs/guardrails), [hooks](/docs/hooks) for permission control — none of this exists in the vanilla SDK. Stratus makes these first-class.
+- **The Responses API is the future, but adoption is low.** Microsoft recommends the [Responses API](https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/responses) for new development. Stratus supports both the [Chat Completions and Responses API](/docs/azure) through the same `Model` interface — swap with one line.
+
+The goal: feel like Anthropic's TypeScript SDK — clean, typed, zero-config for the common case — while properly wrapping Azure's unique capabilities.
+
 ## Features
 
 <Cards>
