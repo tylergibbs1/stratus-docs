@@ -1,0 +1,470 @@
+---
+title: "Guide: Prompt Engineering for Agents"
+description: Write effective instructions that make agents reliable and focused
+---
+
+Your agent's `instructions` field is the single highest-leverage thing you can tune. It shapes every model call, every tool decision, and every handoff. A clear, well-structured system prompt can turn a mediocre agent into a reliable one without changing any code.
+
+In this guide, you will learn how to:
+
+- **Write clear, direct instructions** that eliminate ambiguity and reduce hallucination
+- **Assign a role** to focus the model's behavior and tone
+- **Use examples** in your instructions to teach the model your preferred output patterns
+- **Build dynamic instructions** with functions that adapt to runtime context
+- **Fetch external data** into instructions with async functions
+- **Reference tools by name** so the model knows when and how to use them
+- **Write triage instructions** that route conversations to the right specialist
+- **Apply common patterns** for one-word answers, JSON focus, refusal handling, and more
+- **Avoid common mistakes** that make agents unpredictable
+
+## Why instructions matter
+
+Instructions are the system prompt sent to the model on every turn. They define what the agent does, how it responds, and what it refuses. Unlike user messages that change per request, instructions are stable across the entire conversation.
+
+Good instructions reduce:
+
+- **Hallucination** — the model stays within its defined scope
+- **Tool misuse** — the model knows which tool to reach for and when
+- **Inconsistent tone** — every response matches your product's voice
+- **Wasted tokens** — concise instructions mean faster, cheaper responses
+
+<Callout type="info">
+Instructions map directly to the `system` message in the Azure Chat Completions API. Everything in your `instructions` string becomes the system prompt for every model call in the run loop.
+</Callout>
+
+## Be clear and direct
+
+The most common mistake is writing vague instructions that give the model too much freedom. Tell the agent exactly what to do, what format to use, and what to avoid.
+
+<Tabs items={["Bad", "Good"]}>
+<Tab value="Bad">
+
+```ts title="vague-instructions.ts"
+import { Agent } from "stratus/core";
+
+const agent = new Agent({
+  name: "assistant",
+  model,
+  instructions: "You are a helpful assistant. Help the user with their questions.",
+});
+```
+
+This tells the model nothing specific. It will guess at tone, length, and format.
+
+</Tab>
+<Tab value="Good">
+
+```ts title="clear-instructions.ts"
+import { Agent } from "stratus/core";
+
+const agent = new Agent({
+  name: "assistant",
+  model,
+  instructions: `You are a billing support agent for Acme Corp.
+
+Your job:
+- Answer billing questions using the customer's account data
+- Explain charges, invoices, and payment methods
+- Escalate refund requests to the refund specialist
+
+Rules:
+- Be concise. Use 1-3 sentences unless the customer asks for detail.
+- Never guess at account balances. Always use the lookup_account tool.
+- If you don't know the answer, say so. Do not make up information.
+- Respond in the same language the customer uses.`,
+});
+```
+
+Every sentence constrains the model's behavior. The agent knows its domain, its tools, its format, and its boundaries.
+
+</Tab>
+</Tabs>
+
+Three principles for clear instructions:
+
+1. **Be specific about scope.** "Answer billing questions" is better than "help the user."
+2. **State constraints as rules.** "Never guess at balances" prevents hallucination.
+3. **Define the output format.** "1-3 sentences" stops the model from writing essays.
+
+## Give your agent a role
+
+Assigning a persona through `instructions` focuses the model's behavior. The same task produces different results depending on the role you define.
+
+<Tabs items={["Without role", "With role"]}>
+<Tab value="Without role">
+
+```ts title="no-role.ts"
+import { Agent, run } from "stratus/core";
+
+const agent = new Agent({
+  name: "writer",
+  model,
+  instructions: "Write a product description for a noise-canceling headphone.",
+});
+
+const result = await run(agent, "Write the description.");
+console.log(result.output);
+// Generic, flat description with no particular voice or angle
+```
+
+</Tab>
+<Tab value="With role">
+
+```ts title="with-role.ts"
+import { Agent, run } from "stratus/core";
+
+const agent = new Agent({
+  name: "copywriter",
+  model,
+  instructions: `You are a senior copywriter at a premium audio brand.
+
+Your voice:
+- Confident but not pushy
+- Technical details woven into benefits, not listed as specs
+- Short paragraphs. No bullet points. Every sentence earns its place.
+
+You write product descriptions that make people feel something about sound quality.`,
+});
+
+const result = await run(agent, "Write a description for our new noise-canceling headphones.");
+console.log(result.output);
+// Polished, opinionated copy with a distinct brand voice
+```
+
+</Tab>
+</Tabs>
+
+Roles work because they activate relevant knowledge and writing patterns in the model. A "senior copywriter" writes differently than a generic assistant, even when given the same task.
+
+## Use examples in instructions
+
+When you need the model to follow a specific format, show it. Examples in your instructions (multishot prompting) are more reliable than descriptions of the format.
+
+```ts title="multishot-instructions.ts"
+import { Agent } from "stratus/core";
+
+const agent = new Agent({
+  name: "commit_message_writer",
+  model,
+  instructions: `You write concise git commit messages from diffs.
+
+Follow the Conventional Commits format. Here are examples of good commit messages:
+
+Input: Added a retry mechanism to the HTTP client
+Output: feat(http): add retry with exponential backoff
+
+Input: Fixed the off-by-one error in pagination
+Output: fix(pagination): correct offset calculation for last page
+
+Input: Moved database config to environment variables
+Output: refactor(config): extract database settings to env vars
+
+Input: Updated README with new API endpoints
+Output: docs(api): add endpoint reference to README
+
+Rules:
+- Use lowercase. No period at the end.
+- Scope in parentheses is required.
+- The description must be under 72 characters.
+- Respond with ONLY the commit message. No explanation.`,
+});
+```
+
+<Callout type="info">
+Examples teach by demonstration. If you find yourself writing a paragraph explaining a format, replace it with 3-4 examples instead. The model learns patterns from examples more reliably than from descriptions.
+</Callout>
+
+## Dynamic instructions
+
+When your instructions need runtime data, pass a function instead of a string. The function receives the agent's context object and returns the instructions.
+
+```ts title="dynamic-instructions.ts"
+import { Agent, run } from "stratus/core";
+
+interface AppContext {
+  userName: string;
+  plan: "free" | "pro" | "enterprise";
+  locale: string;
+}
+
+const agent = new Agent<AppContext>({
+  name: "assistant",
+  model,
+  instructions: (ctx) => // [!code highlight]
+    `You are a support agent for Acme Corp.
+
+You are speaking with ${ctx.userName} on the ${ctx.plan} plan.
+Respond in ${ctx.locale === "es" ? "Spanish" : "English"}.
+
+${ctx.plan === "free" ? "Do not offer features only available on paid plans." : ""}
+${ctx.plan === "enterprise" ? "This is a high-priority customer. Be thorough and proactive." : ""}`,
+});
+
+await run(agent, "How do I export my data?", {
+  context: {
+    userName: "Maria",
+    plan: "enterprise",
+    locale: "es",
+  },
+});
+```
+
+The instructions function runs before every model call in the run loop, so the system prompt always reflects the current context.
+
+## Async dynamic instructions
+
+When your instructions depend on external data, use an async function. This is useful for fetching rules from a database, loading feature flags, or pulling in tenant-specific configuration.
+
+```ts title="async-instructions.ts"
+import { Agent, run } from "stratus/core";
+
+interface TenantContext {
+  tenantId: string;
+  db: Database;
+}
+
+const agent = new Agent<TenantContext>({
+  name: "support",
+  model,
+  instructions: async (ctx) => { // [!code highlight]
+    const tenant = await ctx.db.tenants.findById(ctx.tenantId); // [!code highlight]
+    const policies = await ctx.db.policies.findByTenant(ctx.tenantId); // [!code highlight]
+
+    return `You are a support agent for ${tenant.companyName}.
+
+Refund policy: ${policies.refundWindow} day return window.
+Support hours: ${policies.supportHours}.
+Escalation email: ${policies.escalationEmail}.
+
+${tenant.customInstructions ?? ""}
+
+Always follow the company's refund policy exactly. Do not make exceptions.`;
+  },
+});
+
+await run(agent, "I want to return my order from last month", {
+  context: {
+    tenantId: "tenant_abc",
+    db: database,
+  },
+});
+```
+
+<Callout type="warn">
+Async instructions run on every model call in the loop, not just the first. Keep the function fast. If the data does not change during a conversation, fetch it once and cache it in the context object rather than querying the database on every turn.
+</Callout>
+
+## Combining with tools
+
+Instructions should tell the model about its tools: what each tool does, when to use it, and when not to. Reference tools by their exact `name` so there is no ambiguity.
+
+```ts title="tool-aware-instructions.ts"
+import { Agent, tool } from "stratus/core";
+import { z } from "zod";
+
+const searchKnowledgeBase = tool({
+  name: "search_knowledge_base",
+  description: "Search the company knowledge base for support articles",
+  parameters: z.object({
+    query: z.string().describe("Search query"),
+  }),
+  execute: async (_ctx, { query }) => {
+    const results = await kb.search(query);
+    return JSON.stringify(results.slice(0, 3));
+  },
+});
+
+const createTicket = tool({
+  name: "create_ticket",
+  description: "Create a support ticket for issues that need human follow-up",
+  parameters: z.object({
+    summary: z.string(),
+    priority: z.enum(["low", "medium", "high"]),
+  }),
+  execute: async (_ctx, { summary, priority }) => {
+    const ticket = await ticketSystem.create({ summary, priority });
+    return `Ticket ${ticket.id} created.`;
+  },
+});
+
+const agent = new Agent({
+  name: "support",
+  model,
+  instructions: `You are a tier-1 support agent.
+
+Tool usage:
+- ALWAYS call search_knowledge_base before answering a technical question. // [!code highlight]
+  Do not answer from memory. The knowledge base is the source of truth. // [!code highlight]
+- Only call create_ticket when you cannot resolve the issue yourself. // [!code highlight]
+  Try the knowledge base first. If nothing relevant comes back after // [!code highlight]
+  two searches, then create a ticket. // [!code highlight]
+- Set ticket priority to "high" only for data loss or security issues.
+
+Response format:
+- Lead with the answer. Put the source article link at the end.
+- If you created a ticket, give the customer the ticket ID and expected response time.`,
+  tools: [searchKnowledgeBase, createTicket],
+});
+```
+
+Three things to include when referencing tools in instructions:
+
+1. **When to use it.** "ALWAYS call search_knowledge_base before answering."
+2. **When NOT to use it.** "Only call create_ticket when you cannot resolve the issue."
+3. **How to use it.** "Set priority to high only for data loss or security issues."
+
+## Instructions for handoff agents
+
+Triage agents need instructions that map intents to specialists. Be explicit about the routing logic. List each specialist by name and describe the triggers for each handoff.
+
+```ts title="triage-instructions.ts"
+import { Agent } from "stratus/core";
+
+const billingAgent = new Agent({
+  name: "billing_specialist",
+  model,
+  instructions: `You handle billing questions: invoices, charges, payment methods, and plan changes.
+Always look up the customer's account before answering. Never guess at amounts.`,
+  tools: [lookupAccount, getInvoices],
+  handoffDescription: "Transfer here for billing, invoices, and payment questions",
+});
+
+const technicalAgent = new Agent({
+  name: "technical_specialist",
+  model,
+  instructions: `You handle technical issues: bugs, errors, integrations, and API questions.
+Ask for error messages and steps to reproduce before troubleshooting.`,
+  tools: [searchDocs, checkSystemStatus],
+  handoffDescription: "Transfer here for bugs, errors, and technical issues",
+});
+
+const triageAgent = new Agent({
+  name: "triage",
+  model,
+  instructions: `You are the first point of contact for customer support.
+
+Your only job is to understand the customer's issue and route them to the right specialist.
+Do NOT try to solve issues yourself.
+
+Routing rules:
+- Billing, invoices, charges, payment, plan changes -> billing_specialist
+- Bugs, errors, API issues, integrations, downtime -> technical_specialist
+- If the issue is unclear, ask ONE clarifying question before routing.
+- Never ask more than one clarifying question. If still unclear after one, route to technical_specialist.`, // [!code highlight]
+  handoffs: [billingAgent, technicalAgent],
+});
+```
+
+<Callout type="info">
+The `handoffDescription` on each specialist is injected into the triage agent's tool definitions. Write it from the triage agent's perspective: describe _when_ to transfer, not what the specialist does internally.
+</Callout>
+
+## Common patterns
+
+Reference this table when writing instructions for specific behaviors:
+
+| Pattern | Instructions snippet | When to use |
+| --- | --- | --- |
+| **One-word answers** | `"Respond with a single word: yes or no. No explanation."` | Classification, yes/no gates |
+| **JSON only** | `"Respond with valid JSON only. No markdown, no explanation."` | Structured extraction without `outputType` |
+| **Refusal** | `"If the user asks about [topic], respond: 'I can only help with [scope].'"` | Scope enforcement |
+| **Step-by-step** | `"Think through the problem step by step before giving your final answer."` | Math, logic, complex reasoning |
+| **Brevity** | `"Be concise. Maximum 2 sentences per response."` | Chat, quick lookups |
+| **Citation** | `"Always cite the source article URL at the end of your response."` | Knowledge base agents |
+| **Language match** | `"Respond in the same language the user writes in."` | Multilingual support |
+| **No hallucination** | `"If you do not have enough information, say 'I don't know.' Never guess."` | Any agent with factual requirements |
+| **Tool-first** | `"Always call [tool_name] before answering. Do not answer from memory."` | Agents that must ground answers in data |
+| **Numbered list** | `"Return results as a numbered list, one item per line."` | Search results, recommendations |
+
+You can combine several patterns in a single instructions string:
+
+```ts title="combined-patterns.ts"
+import { Agent } from "stratus/core";
+
+const agent = new Agent({
+  name: "fact_checker",
+  model,
+  instructions: `You are a fact-checking assistant.
+
+- Always call search_knowledge_base before answering.
+- If the knowledge base has no relevant results, say "I couldn't verify this."
+- Respond in the same language the user writes in.
+- Be concise. Maximum 3 sentences.
+- Cite the source URL at the end.`,
+  tools: [searchKnowledgeBase],
+});
+```
+
+## What to avoid
+
+### Too vague
+
+```ts
+// Bad — the model has no idea what domain, format, or constraints to follow
+instructions: "Be helpful and answer questions."
+```
+
+Fix it by specifying the domain, output format, and boundaries.
+
+### Too long
+
+```ts
+// Bad — 2000-word instructions with every edge case
+instructions: `You are an assistant. Here are 47 rules you must follow...
+Rule 1: Always greet the user. Rule 2: Never say "I don't know."
+Rule 3: If the user says "hello" respond with "Hi there!" ...`
+```
+
+Long instructions waste tokens and can confuse the model. If rules conflict (and in long prompts they often do), the model picks one arbitrarily. Keep instructions under 500 words. Move edge-case logic into tools, guardrails, or hooks instead.
+
+### Conflicting instructions
+
+```ts
+// Bad — "be concise" contradicts "explain your reasoning in detail"
+instructions: `Be concise. Keep answers short.
+Always explain your reasoning in detail so the user understands.`
+```
+
+The model cannot satisfy both. Pick one and commit to it. If you need both behaviors, use dynamic instructions that switch based on context.
+
+### Instructions that duplicate tool descriptions
+
+```ts
+// Bad — repeating what the tool description already says
+instructions: `You have a tool called search_products. It searches the product
+catalog by keyword and returns up to 10 results with name, price, and ID.
+You also have a tool called get_product_details. It takes a product ID and
+returns the full product information including description, reviews, and stock.`
+```
+
+The model already sees tool descriptions in every request. Instead, tell it _when_ and _how_ to use tools, not _what_ they do.
+
+### Prompting for behavior you should enforce in code
+
+```ts
+// Bad — relying on instructions for security
+instructions: "Never process refunds over $500."
+```
+
+The model might follow this, or it might not. For hard constraints, use hooks (`beforeToolCall` with a `"deny"` decision) or guardrails. Instructions are for guiding behavior, not enforcing invariants.
+
+<Callout type="warn">
+Instructions are suggestions to the model, not guarantees. For anything that must be enforced 100% of the time (spending limits, PII redaction, access control), use [hooks](/docs/hooks) or [guardrails](/docs/guardrails) in code.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Agents" href="/docs/agents">
+    Full reference for Agent configuration and dynamic instructions
+  </Card>
+  <Card title="Tools" href="/docs/tools">
+    Define tools that your instructions can reference
+  </Card>
+  <Card title="Handoffs" href="/docs/handoffs">
+    Build multi-agent routing with triage instructions
+  </Card>
+  <Card title="Hooks" href="/docs/hooks">
+    Enforce hard constraints that instructions alone cannot guarantee
+  </Card>
+</Cards>

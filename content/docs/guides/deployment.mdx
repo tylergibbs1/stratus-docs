@@ -1,0 +1,769 @@
+---
+title: "Guide: Deployment & Hosting"
+description: Deploy Stratus agents in production with containers, sessions, and monitoring
+---
+
+Stratus agents are not stateless request handlers. The run loop maintains conversation history, executes tools, tracks token usage, and manages handoffs across multiple model calls within a single request. This changes how you think about deployment.
+
+You will learn how to:
+
+- **Choose a deployment pattern** -- ephemeral, persistent, or hybrid -- based on your workload
+- **Expose agents over HTTP** with streaming SSE endpoints
+- **Containerize** a Stratus agent service with Docker
+- **Prevent infinite loops** with `maxTurns`, abort signals, and timeouts
+- **Monitor production agents** with tracing and usage tracking
+- **Control costs** by tracking tokens and enforcing limits
+- **Harden for production** with guardrails, input validation, and hook-based permission control
+
+## How Stratus agents differ from stateless APIs
+
+A typical REST endpoint receives a request and returns a response. A Stratus agent run is fundamentally different:
+
+1. **Multiple model calls per request.** A single `run()` may call the model several times -- once to decide on a tool, once to process the result, once more to produce the final answer.
+2. **Tool execution between calls.** The run loop calls your tools (database queries, API calls, file reads) and injects the results back into the conversation.
+3. **State accumulates.** Message history, token usage, and the current agent all evolve during a run. After a handoff, a different agent may be handling the conversation.
+4. **Runs take variable time.** A simple question might need one model call. A complex research task with four tool calls might need five. Plan for variable latency and set upper bounds.
+
+This means your deployment needs to handle long-lived requests, streaming responses, and graceful cancellation -- not just fast request/response cycles.
+
+## Requirements
+
+| Requirement | Details |
+| --- | --- |
+| **Runtime** | Bun 1.0+ or Node.js 20+ (ESM support required) |
+| **Network** | Outbound HTTPS to your Azure OpenAI endpoint |
+| **Memory** | 256 MB minimum. 512 MB+ recommended for agents with large tool outputs or long conversation histories |
+| **CPU** | 1 vCPU minimum. Most time is spent waiting on Azure API calls, so CPU is rarely the bottleneck |
+| **Environment variables** | `AZURE_ENDPOINT`, `AZURE_API_KEY`, and your deployment name |
+
+<Callout type="info">
+Stratus spends most of its time waiting on network I/O (model API calls, tool HTTP requests). A single process can handle many concurrent agent runs without high CPU usage.
+</Callout>
+
+## Deployment patterns
+
+Choose a pattern based on how your agents interact with users.
+
+<Tabs items={["Ephemeral", "Persistent sessions", "Hybrid"]}>
+<Tab value="Ephemeral">
+
+### Ephemeral -- new run per request
+
+Each HTTP request creates a fresh `run()` with no prior history. Best for one-off tasks like classification, extraction, or single-turn Q&A.
+
+```ts title="ephemeral.ts"
+import { AzureChatCompletionsModel } from "stratus";
+import { Agent, run } from "stratus/core";
+
+const model = new AzureChatCompletionsModel({
+  endpoint: process.env.AZURE_ENDPOINT!,
+  apiKey: process.env.AZURE_API_KEY!,
+  deployment: "gpt-5.2",
+});
+
+const agent = new Agent({
+  name: "classifier",
+  model,
+  instructions: "Classify the user's intent as billing, technical, or general.",
+});
+
+// Each request gets a clean run — no shared state
+async function handleRequest(message: string) {
+  const result = await run(agent, message, { maxTurns: 3 }); // [!code highlight]
+  return { output: result.output, tokens: result.usage.totalTokens };
+}
+```
+
+**Pros:** Simple, horizontally scalable, no state management.
+
+**Cons:** No conversation memory between requests.
+
+</Tab>
+<Tab value="Persistent sessions">
+
+### Persistent sessions -- long-lived process
+
+Use `createSession()` for multi-turn conversations where the process stays alive. Best for chat applications, interactive assistants, and WebSocket servers.
+
+```ts title="persistent.ts"
+import { AzureChatCompletionsModel } from "stratus";
+import { createSession } from "stratus/core";
+
+const model = new AzureChatCompletionsModel({
+  endpoint: process.env.AZURE_ENDPOINT!,
+  apiKey: process.env.AZURE_API_KEY!,
+  deployment: "gpt-5.2",
+});
+
+// One session per user connection
+const sessions = new Map<string, ReturnType<typeof createSession>>();
+
+function getOrCreateSession(userId: string) {
+  if (!sessions.has(userId)) {
+    sessions.set(userId, createSession({ // [!code highlight]
+      model,
+      instructions: "You are a helpful assistant.",
+      maxTurns: 10,
+    }));
+  }
+  return sessions.get(userId)!;
+}
+
+async function handleMessage(userId: string, message: string) {
+  const session = getOrCreateSession(userId);
+  session.send(message);
+
+  const chunks: string[] = [];
+  for await (const event of session.stream()) {
+    if (event.type === "content_delta") {
+      chunks.push(event.content);
+    }
+  }
+
+  const result = await session.result;
+  return { output: chunks.join(""), tokens: result.usage.totalTokens };
+}
+```
+
+**Pros:** Full conversation history, natural multi-turn flow.
+
+**Cons:** Sessions are lost on process restart. Memory grows with conversation length.
+
+</Tab>
+<Tab value="Hybrid">
+
+### Hybrid -- save and resume with database persistence
+
+Use `save()` and `resumeSession()` to persist conversations across process restarts, deployments, or server instances. Best for workflows that span multiple sessions or need durability.
+
+```ts title="hybrid.ts"
+import { AzureChatCompletionsModel } from "stratus";
+import { createSession, resumeSession } from "stratus/core";
+import type { SessionSnapshot } from "stratus/core";
+
+const model = new AzureChatCompletionsModel({
+  endpoint: process.env.AZURE_ENDPOINT!,
+  apiKey: process.env.AZURE_API_KEY!,
+  deployment: "gpt-5.2",
+});
+
+const sessionConfig = {
+  model,
+  instructions: "You are a helpful assistant.",
+  maxTurns: 10,
+};
+
+async function handleMessage(sessionId: string | null, message: string, db: Database) {
+  let session;
+
+  if (sessionId) {
+    // Resume from database
+    const saved = await db.get<SessionSnapshot>(`session:${sessionId}`); // [!code highlight]
+    session = saved
+      ? resumeSession(saved, sessionConfig) // [!code highlight]
+      : createSession(sessionConfig);
+  } else {
+    session = createSession(sessionConfig);
+  }
+
+  session.send(message);
+
+  const chunks: string[] = [];
+  for await (const event of session.stream()) {
+    if (event.type === "content_delta") {
+      chunks.push(event.content);
+    }
+  }
+
+  const result = await session.result;
+
+  // Persist after each turn
+  const snapshot = session.save(); // [!code highlight]
+  await db.set(`session:${snapshot.id}`, snapshot); // [!code highlight]
+
+  return {
+    sessionId: snapshot.id,
+    output: chunks.join(""),
+    tokens: result.usage.totalTokens,
+  };
+}
+```
+
+**Pros:** Survives restarts, works across multiple servers, supports long-running workflows.
+
+**Cons:** Serialization overhead, database dependency. Trim old messages for very long conversations.
+
+</Tab>
+</Tabs>
+
+## HTTP API example
+
+Wrap a Stratus agent in an HTTP endpoint that streams responses as Server-Sent Events. This pattern works for any frontend that consumes SSE.
+
+<Tabs items={["Hono", "Express"]}>
+<Tab value="Hono">
+
+```ts title="server.ts"
+import { Hono } from "hono";
+import { streamSSE } from "hono/streaming";
+import { AzureChatCompletionsModel } from "stratus";
+import { Agent, stream, RunAbortedError } from "stratus/core";
+
+const model = new AzureChatCompletionsModel({
+  endpoint: process.env.AZURE_ENDPOINT!,
+  apiKey: process.env.AZURE_API_KEY!,
+  deployment: "gpt-5.2",
+});
+
+const agent = new Agent({
+  name: "assistant",
+  model,
+  instructions: "You are a helpful assistant.",
+  tools: [/* your tools */],
+});
+
+const app = new Hono();
+
+app.post("/chat", async (c) => {
+  const { message } = await c.req.json<{ message: string }>();
+  const ac = new AbortController();
+
+  // Cancel on client disconnect
+  c.req.raw.signal.addEventListener("abort", () => ac.abort()); // [!code highlight]
+
+  const { stream: s, result } = stream(agent, message, {
+    maxTurns: 10,
+    signal: ac.signal, // [!code highlight]
+  });
+
+  return streamSSE(c, async (sse) => {
+    try {
+      for await (const event of s) {
+        switch (event.type) {
+          case "content_delta":
+            await sse.writeSSE({
+              event: "content",
+              data: JSON.stringify({ text: event.content }),
+            });
+            break;
+          case "tool_call_start":
+            await sse.writeSSE({
+              event: "tool_start",
+              data: JSON.stringify({ name: event.toolCall.name }),
+            });
+            break;
+          case "tool_call_done":
+            await sse.writeSSE({
+              event: "tool_done",
+              data: JSON.stringify({ id: event.toolCallId }),
+            });
+            break;
+        }
+      }
+
+      const finalResult = await result;
+      await sse.writeSSE({
+        event: "complete",
+        data: JSON.stringify({
+          tokens: finalResult.usage.totalTokens,
+          finishReason: finalResult.finishReason,
+        }),
+      });
+    } catch (error) {
+      if (!(error instanceof RunAbortedError)) {
+        await sse.writeSSE({
+          event: "error",
+          data: JSON.stringify({ message: "Internal error" }),
+        });
+      }
+    }
+  });
+});
+
+export default app;
+```
+
+</Tab>
+<Tab value="Express">
+
+```ts title="server.ts"
+import express from "express";
+import { AzureChatCompletionsModel } from "stratus";
+import { Agent, stream, RunAbortedError } from "stratus/core";
+
+const model = new AzureChatCompletionsModel({
+  endpoint: process.env.AZURE_ENDPOINT!,
+  apiKey: process.env.AZURE_API_KEY!,
+  deployment: "gpt-5.2",
+});
+
+const agent = new Agent({
+  name: "assistant",
+  model,
+  instructions: "You are a helpful assistant.",
+  tools: [/* your tools */],
+});
+
+const app = express();
+app.use(express.json());
+
+app.post("/chat", async (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  const ac = new AbortController();
+  req.on("close", () => ac.abort()); // [!code highlight]
+
+  const { message } = req.body;
+  const { stream: s, result } = stream(agent, message, {
+    maxTurns: 10,
+    signal: ac.signal, // [!code highlight]
+  });
+
+  try {
+    for await (const event of s) {
+      if (event.type === "content_delta") {
+        res.write(`event: content\ndata: ${JSON.stringify({ text: event.content })}\n\n`);
+      }
+    }
+
+    const finalResult = await result;
+    res.write(`event: complete\ndata: ${JSON.stringify({
+      tokens: finalResult.usage.totalTokens,
+      finishReason: finalResult.finishReason,
+    })}\n\n`);
+  } catch (error) {
+    if (!(error instanceof RunAbortedError)) {
+      res.write(`event: error\ndata: ${JSON.stringify({ message: "Internal error" })}\n\n`);
+    }
+  }
+
+  res.end();
+});
+
+app.listen(3000);
+```
+
+</Tab>
+</Tabs>
+
+Both examples abort the agent run when the client disconnects. This prevents wasted compute on abandoned requests.
+
+## Docker containerization
+
+Package a Stratus agent service as a container. This Dockerfile uses Bun for a lightweight image:
+
+```dockerfile title="Dockerfile"
+FROM oven/bun:1 AS base
+WORKDIR /app
+
+# Install dependencies
+COPY package.json bun.lockb ./
+RUN bun install --frozen-lockfile --production
+
+# Copy application code
+COPY src/ ./src/
+COPY tsconfig.json ./
+
+# Runtime
+EXPOSE 3000
+ENV NODE_ENV=production
+CMD ["bun", "run", "src/server.ts"]
+```
+
+Build and run:
+
+```bash title="Terminal"
+docker build -t stratus-agent .
+docker run -p 3000:3000 \
+  -e AZURE_ENDPOINT="https://your-resource.openai.azure.com" \
+  -e AZURE_API_KEY="your-key" \
+  stratus-agent
+```
+
+<Callout type="warn">
+Never bake API keys into the image. Pass them as environment variables at runtime, or use a secrets manager.
+</Callout>
+
+For Node.js, swap the base image and entrypoint:
+
+```dockerfile title="Dockerfile.node"
+FROM node:20-slim AS base
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+COPY src/ ./src/
+COPY tsconfig.json ./
+
+EXPOSE 3000
+ENV NODE_ENV=production
+CMD ["node", "--loader", "tsx", "src/server.ts"]
+```
+
+## Preventing infinite loops
+
+An agent with tools can loop indefinitely if the model keeps calling tools without producing a final answer. Three mechanisms protect against this.
+
+### maxTurns
+
+Set `maxTurns` to cap the number of model calls in a single run. When exceeded, Stratus throws `MaxTurnsExceededError`.
+
+```ts title="max-turns.ts"
+import { Agent, run, MaxTurnsExceededError } from "stratus/core";
+
+const agent = new Agent({
+  name: "researcher",
+  model,
+  tools: [searchWeb, readPage, summarize],
+});
+
+try {
+  const result = await run(agent, "Research quantum computing breakthroughs", {
+    maxTurns: 8, // [!code highlight]
+  });
+  console.log(result.output);
+} catch (error) {
+  if (error instanceof MaxTurnsExceededError) {
+    console.error("Agent exceeded 8 model calls — returning partial result");
+  }
+}
+```
+
+<Callout type="info">
+The default `maxTurns` is 10. For production, set it explicitly based on your agent's expected behavior. Simple Q&A agents need 2-3 turns. Research agents with multiple tools may need 8-15.
+</Callout>
+
+### Abort signal with timeout
+
+Use `AbortSignal.timeout()` to enforce a wall-clock deadline. This catches cases where individual model calls are slow, not just where the agent loops too many times.
+
+```ts title="timeout.ts"
+import { Agent, run, RunAbortedError } from "stratus/core";
+
+try {
+  const result = await run(agent, "Summarize this dataset", {
+    maxTurns: 10,
+    signal: AbortSignal.timeout(30_000), // [!code highlight]
+  });
+  console.log(result.output);
+} catch (error) {
+  if (error instanceof RunAbortedError) {
+    console.error("Agent timed out after 30 seconds");
+  }
+}
+```
+
+### Combined pattern
+
+Use both together for defense in depth:
+
+```ts title="combined-safety.ts"
+import { Agent, run, MaxTurnsExceededError, RunAbortedError } from "stratus/core";
+
+async function safeRun(agent: Agent, input: string) {
+  try {
+    return await run(agent, input, {
+      maxTurns: 10,                        // [!code highlight]
+      signal: AbortSignal.timeout(30_000), // [!code highlight]
+    });
+  } catch (error) {
+    if (error instanceof MaxTurnsExceededError) {
+      return { error: "too_many_turns", message: "Agent exceeded turn limit" };
+    }
+    if (error instanceof RunAbortedError) {
+      return { error: "timeout", message: "Agent timed out" };
+    }
+    throw error;
+  }
+}
+```
+
+## Monitoring
+
+### Tracing
+
+Wrap agent runs with `withTrace()` to capture span-level timing for every model call, tool execution, handoff, and guardrail check:
+
+```ts title="traced-endpoint.ts"
+import { withTrace, Agent, run } from "stratus/core";
+
+app.post("/chat", async (req, res) => {
+  const { result, trace } = await withTrace("chat_request", async () => { // [!code highlight]
+    return run(agent, req.body.message, { maxTurns: 10 });
+  });
+
+  // Log trace to your observability platform
+  for (const span of trace.spans) {
+    console.log(`[${span.type}] ${span.name}: ${span.duration}ms`); // [!code highlight]
+    if (span.type === "model_call" && span.metadata?.usage) {
+      console.log(`  tokens: ${JSON.stringify(span.metadata.usage)}`);
+    }
+  }
+
+  res.json({
+    output: result.output,
+    traceId: trace.id,
+    duration: trace.duration,
+  });
+});
+```
+
+Each trace includes spans for:
+
+| Span type | What it captures |
+| --- | --- |
+| `model_call` | LLM API call with agent name, turn number, usage, and tool call count |
+| `tool_execution` | Tool `execute` function with tool name and duration |
+| `handoff` | Agent-to-agent transfer with from/to names |
+| `guardrail` | Input or output guardrail execution |
+| `subagent` | Sub-agent execution with child agent name |
+
+### Usage tracking
+
+Every `RunResult` includes accumulated token usage. Log it to track costs per request:
+
+```ts title="usage-logging.ts"
+import type { UsageInfo } from "stratus/core";
+
+function logUsage(requestId: string, usage: UsageInfo) {
+  console.log(JSON.stringify({
+    requestId,
+    promptTokens: usage.promptTokens,
+    completionTokens: usage.completionTokens,
+    totalTokens: usage.totalTokens,
+    cacheReadTokens: usage.cacheReadTokens ?? 0,
+    cacheCreationTokens: usage.cacheCreationTokens ?? 0,
+    timestamp: new Date().toISOString(),
+  }));
+}
+
+// After every run
+const result = await run(agent, input);
+logUsage(requestId, result.usage); // [!code highlight]
+```
+
+## Cost management
+
+### Token tracking per request
+
+Build a cost estimator from usage data:
+
+```ts title="cost-tracking.ts"
+import type { UsageInfo } from "stratus/core";
+
+interface TokenPricing {
+  promptPer1k: number;
+  completionPer1k: number;
+  cachedPromptPer1k?: number;
+}
+
+function estimateCost(usage: UsageInfo, pricing: TokenPricing): number {
+  const promptCost = (usage.promptTokens / 1000) * pricing.promptPer1k;
+  const completionCost = (usage.completionTokens / 1000) * pricing.completionPer1k;
+
+  let cacheDiscount = 0;
+  if (usage.cacheReadTokens && pricing.cachedPromptPer1k !== undefined) {
+    const savings = pricing.promptPer1k - pricing.cachedPromptPer1k;
+    cacheDiscount = (usage.cacheReadTokens / 1000) * savings;
+  }
+
+  return promptCost + completionCost - cacheDiscount;
+}
+
+// Track per request
+const result = await run(agent, input);
+const cost = estimateCost(result.usage, {
+  promptPer1k: 0.005,
+  completionPer1k: 0.015,
+  cachedPromptPer1k: 0.0025,
+});
+console.log(`Request cost: $${cost.toFixed(4)}`); // [!code highlight]
+```
+
+### Enforcing usage limits
+
+Reject requests that would exceed a user's token budget. Track cumulative usage per user and check before starting a new run:
+
+```ts title="usage-limits.ts"
+import { Agent, run } from "stratus/core";
+
+interface UserBudget {
+  totalTokensUsed: number;
+  maxTokens: number;
+}
+
+async function handleWithBudget(
+  agent: Agent,
+  input: string,
+  budget: UserBudget,
+) {
+  if (budget.totalTokensUsed >= budget.maxTokens) { // [!code highlight]
+    throw new Error("Token budget exceeded. Please upgrade your plan.");
+  }
+
+  const result = await run(agent, input, { maxTurns: 5 });
+  budget.totalTokensUsed += result.usage.totalTokens; // [!code highlight]
+
+  return result;
+}
+```
+
+<Callout type="info">
+Token budgets are approximate. A single run may use more tokens than expected if the model makes several tool calls. Set budgets with headroom and check after each run, not mid-run.
+</Callout>
+
+## Security
+
+### Input guardrails
+
+Block harmful or invalid input before it reaches the model. Guardrails run in parallel with the first model call, so they add minimal latency:
+
+```ts title="production-guardrails.ts"
+import { Agent } from "stratus/core";
+import type { InputGuardrail } from "stratus/core";
+
+const piiGuardrail: InputGuardrail = {
+  name: "block_pii",
+  execute: async (input) => {
+    const hasSSN = /\b\d{3}-\d{2}-\d{4}\b/.test(input);
+    const hasCreditCard = /\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b/.test(input);
+    return {
+      tripwireTriggered: hasSSN || hasCreditCard,
+      outputInfo: { reason: "PII detected in input" },
+    };
+  },
+};
+
+const injectionGuardrail: InputGuardrail = {
+  name: "block_injection",
+  execute: async (input) => {
+    const patterns = [
+      /ignore (?:all )?(?:previous |prior )?instructions/i,
+      /you are now/i,
+      /system:\s/i,
+    ];
+    const triggered = patterns.some((p) => p.test(input));
+    return {
+      tripwireTriggered: triggered,
+      outputInfo: { reason: "Potential prompt injection detected" },
+    };
+  },
+};
+
+const agent = new Agent({
+  name: "assistant",
+  model,
+  inputGuardrails: [piiGuardrail, injectionGuardrail], // [!code highlight]
+});
+```
+
+Catch guardrail errors in your request handler:
+
+```ts title="guardrail-handling.ts"
+import { run, InputGuardrailTripwireTriggered } from "stratus/core";
+
+try {
+  const result = await run(agent, userInput);
+  res.json({ output: result.output });
+} catch (error) {
+  if (error instanceof InputGuardrailTripwireTriggered) { // [!code highlight]
+    res.status(400).json({
+      error: "blocked",
+      guardrail: error.guardrailName,
+    });
+  }
+}
+```
+
+### Tool permission control with hooks
+
+Use `beforeToolCall` to enforce authorization rules. The model sees denials as tool results and adapts its response:
+
+```ts title="permission-hooks.ts"
+import { Agent } from "stratus/core";
+
+interface AppContext {
+  userId: string;
+  role: "user" | "admin";
+}
+
+const agent = new Agent<AppContext>({
+  name: "admin_assistant",
+  model,
+  tools: [readData, writeData, deleteData],
+  hooks: {
+    beforeToolCall: async ({ toolCall, context }) => {
+      // Block destructive operations for non-admins
+      const destructiveTools = ["write_data", "delete_data"];
+      if (
+        destructiveTools.includes(toolCall.function.name) &&
+        context.role !== "admin"
+      ) {
+        return { // [!code highlight]
+          decision: "deny", // [!code highlight]
+          reason: "This action requires admin privileges.", // [!code highlight]
+        }; // [!code highlight]
+      }
+    },
+    beforeHandoff: async ({ toAgent, context }) => {
+      // Prevent handoff to admin agent for non-admin users
+      if (toAgent.name === "admin_agent" && context.role !== "admin") {
+        return {
+          decision: "deny",
+          reason: "Access to admin agent denied.",
+        };
+      }
+    },
+  },
+});
+```
+
+<Callout type="info">
+Hook decisions support three modes: `"allow"` (default), `"deny"` (block with reason), and `"modify"` (rewrite tool call arguments). See the [Hooks reference](/docs/hooks) for the full `ToolCallDecision` and `HandoffDecision` types.
+</Callout>
+
+### Output guardrails
+
+Validate model output before returning it to users. Output guardrails run after the model responds and can block sensitive data from leaking:
+
+```ts title="output-guardrails.ts"
+import type { OutputGuardrail } from "stratus/core";
+
+const noInternalData: OutputGuardrail = {
+  name: "no_internal_data",
+  execute: async (output) => {
+    const hasInternalUrl = /https?:\/\/internal\./i.test(output);
+    const hasApiKey = /(?:api[_-]?key|secret|token)\s*[:=]\s*\S+/i.test(output);
+    return {
+      tripwireTriggered: hasInternalUrl || hasApiKey,
+      outputInfo: { reason: "Output contains internal data" },
+    };
+  },
+};
+
+const agent = new Agent({
+  name: "assistant",
+  model,
+  outputGuardrails: [noInternalData], // [!code highlight]
+});
+```
+
+## Next steps
+
+<Cards>
+  <Card title="Sessions" href="/docs/sessions">
+    Multi-turn conversations with save, resume, and fork
+  </Card>
+  <Card title="Tracing" href="/docs/tracing">
+    Span-based observability for model calls, tools, and handoffs
+  </Card>
+  <Card title="Hooks" href="/docs/hooks">
+    Permission control with allow, deny, and modify decisions
+  </Card>
+  <Card title="Guardrails" href="/docs/guardrails">
+    Input and output validation with tripwire support
+  </Card>
+</Cards>

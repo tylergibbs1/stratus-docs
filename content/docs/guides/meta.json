@@ -1,5 +1,5 @@
 {
 	"title": "Guides",
 	"defaultOpen": true,
-	"pages": ["agentic-tool-use", "real-time-streaming", "customer-support-agent", "research-agent", "data-extraction"]
+	"pages": ["agentic-tool-use", "real-time-streaming", "prompt-engineering", "prompt-chaining", "guardrail-patterns", "reducing-latency", "deployment", "customer-support-agent", "research-agent", "data-extraction"]
 }

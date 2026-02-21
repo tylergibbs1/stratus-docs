@@ -1,0 +1,381 @@
+---
+title: "Guide: Reducing Latency"
+description: Make your agents faster with streaming, model selection, and prompt optimization
+---
+
+Every millisecond matters in production. A slow agent drives users away, burns tokens, and blocks downstream systems. This guide covers the most effective techniques for reducing real and perceived latency in Stratus agents, from quick wins to architectural changes.
+
+In this guide, you will:
+
+- **Use streaming** to display partial responses as they arrive, eliminating blank-screen waiting
+- **Choose the right model deployment** for each agent based on speed vs. capability tradeoffs
+- **Optimize instructions** to cut prompt tokens and speed up time-to-first-token
+- **Cap output length with maxTokens** for predictable response times
+- **Reduce tool round-trips** by designing tools that return complete data and enabling parallel calls
+- **Skip the final model call** with `stop_on_first_tool` when you only need the tool result
+- **Abort long-running operations** with `AbortSignal.timeout()` to enforce hard deadlines
+- **Measure with tracing** to identify whether bottlenecks are in model calls or tool execution
+
+## Use streaming
+
+The single biggest perceived-latency improvement is switching from `run()` to `stream()`. With `run()`, the user sees nothing until the entire response is generated. With `stream()`, tokens appear as soon as the model produces them.
+
+```ts title="before-run.ts"
+import { Agent, run } from "stratus/core";
+import { AzureResponsesModel } from "stratus";
+
+const model = new AzureResponsesModel({ deployment: "gpt-5.2" });
+const agent = new Agent({ name: "assistant", model });
+
+// User sees nothing for 2-5 seconds, then the full response appears at once
+const result = await run(agent, "Explain how TCP works");
+console.log(result.output);
+```
+
+```ts title="after-stream.ts"
+import { Agent, stream } from "stratus/core";
+import { AzureResponsesModel } from "stratus";
+
+const model = new AzureResponsesModel({ deployment: "gpt-5.2" });
+const agent = new Agent({ name: "assistant", model });
+
+// First token appears in ~200ms, response builds incrementally
+const { stream: s, result } = stream(agent, "Explain how TCP works"); // [!code highlight]
+
+for await (const event of s) {
+  if (event.type === "content_delta") {
+    process.stdout.write(event.content); // [!code highlight]
+  }
+}
+
+const finalResult = await result;
+console.log(`\n\nTokens: ${finalResult.usage.totalTokens}`);
+```
+
+Streaming does not change total generation time. The model produces the same number of tokens either way. But perceived latency drops dramatically because the user sees progress immediately instead of staring at a blank screen.
+
+<Callout type="info">
+For HTTP APIs, stream responses to the frontend using Server-Sent Events. See the [Real-Time Streaming guide](/docs/guides/real-time-streaming) for complete SSE endpoint examples with Hono and Express.
+</Callout>
+
+## Choose the right model
+
+Not every agent needs the most capable model. Azure offers multiple deployment tiers, and smaller models respond significantly faster.
+
+```ts title="fast-model.ts"
+import { AzureResponsesModel } from "stratus";
+
+// Fast model for simple routing, classification, and extraction
+const fastModel = new AzureResponsesModel({ deployment: "gpt-4.1-mini" }); // [!code highlight]
+
+// Full model for complex reasoning and multi-step planning
+const fullModel = new AzureResponsesModel({ deployment: "gpt-5.2" }); // [!code highlight]
+```
+
+Use the fast model for agents that do simple, well-defined tasks:
+
+```ts title="tiered-agents.ts"
+import { Agent } from "stratus/core";
+
+// Router: classifies intent — fast model is fine
+const router = new Agent({
+  name: "router",
+  model: fastModel, // [!code highlight]
+  instructions: "Classify the user's intent as one of: billing, technical, account, other.",
+  outputType: z.object({ intent: z.enum(["billing", "technical", "account", "other"]) }),
+});
+
+// Researcher: synthesizes complex answers — needs the full model
+const researcher = new Agent({
+  name: "researcher",
+  model: fullModel, // [!code highlight]
+  instructions: "You are a research assistant. Use tools to find information and provide detailed answers.",
+  tools: [searchDocs, queryDatabase],
+});
+```
+
+<Callout type="info">
+Measure first, then choose. A `gpt-4.1-mini` classification agent that takes 300ms is better than a `gpt-5.2` agent that takes 1.5s for the same task. Use [tracing](#measure-with-tracing) to compare.
+</Callout>
+
+## Optimize instructions
+
+Every token in your instructions adds to prompt processing time. The model must read and process the full system prompt before generating any output. Shorter, more focused instructions mean faster time-to-first-token.
+
+```ts title="before-verbose.ts"
+// Verbose: 120+ tokens of instructions
+const agent = new Agent({
+  name: "classifier",
+  model,
+  instructions: `You are a highly capable and experienced customer service ticket
+    classifier. Your job is to carefully read the incoming customer support ticket
+    and determine the most appropriate category for it. You should consider all
+    aspects of the ticket including the subject line, the body of the message,
+    and any contextual clues. The categories available are: billing, technical,
+    account, and other. Please respond with just the category name.`,
+});
+```
+
+```ts title="after-concise.ts"
+// Concise: ~30 tokens, same accuracy
+const agent = new Agent({
+  name: "classifier",
+  model,
+  instructions: "Classify the ticket into: billing, technical, account, or other.", // [!code highlight]
+});
+```
+
+Tips for leaner instructions:
+
+- Remove preamble like "You are a highly capable..." — the model does not need flattery to perform well
+- Use `outputType` with Zod instead of explaining output format in prose — the schema is the instruction
+- Put per-request context in the user message, not in static instructions
+- Use `.describe()` on Zod fields instead of duplicating field descriptions in the system prompt
+
+## Set maxTokens
+
+Without `maxTokens`, the model generates until it finishes its thought or hits the deployment's limit. For tasks with predictable output length, capping tokens prevents runaway generation.
+
+```ts title="max-tokens.ts"
+import { Agent } from "stratus/core";
+
+const summarizer = new Agent({
+  name: "summarizer",
+  model,
+  instructions: "Summarize the input in 2-3 sentences.",
+  modelSettings: {
+    maxTokens: 150, // [!code highlight]
+  },
+});
+```
+
+This is especially useful for classification, extraction, and routing agents where the output is short and structured:
+
+```ts title="max-tokens-extraction.ts"
+const extractor = new Agent({
+  name: "extractor",
+  model,
+  instructions: "Extract the person's name and email from the text.",
+  outputType: z.object({
+    name: z.string(),
+    email: z.string().email(),
+  }),
+  modelSettings: {
+    maxTokens: 100, // JSON output is always short // [!code highlight]
+  },
+});
+```
+
+<Callout type="warn">
+Setting `maxTokens` too low can cause truncated output. The model stops mid-sentence when the limit is hit. For structured output, a truncated response causes an `OutputParseError`. Always leave headroom above the expected output length.
+</Callout>
+
+## Reduce tool round-trips
+
+Each tool round-trip requires a full model call: the model generates tool call arguments, Stratus executes the tool, then sends results back to the model for another turn. Fewer round-trips means fewer model calls means lower latency.
+
+### Design tools that return complete data
+
+Instead of tools that return IDs (forcing the model to call another tool to get details), return the full data in one call:
+
+```ts title="before-two-calls.ts"
+// Bad: model needs two round-trips to get useful data
+const searchUsers = tool({
+  name: "search_users",
+  description: "Search users by name, returns IDs",
+  parameters: z.object({ query: z.string() }),
+  execute: async (ctx, { query }) => {
+    const ids = await ctx.db.users.search(query);
+    return JSON.stringify(ids); // Just IDs — model must call getUser next
+  },
+});
+```
+
+```ts title="after-one-call.ts"
+// Good: model gets everything it needs in one call
+const searchUsers = tool({
+  name: "search_users",
+  description: "Search users by name, returns full user records",
+  parameters: z.object({ query: z.string() }),
+  execute: async (ctx, { query }) => {
+    const users = await ctx.db.users.search(query, { include: ["name", "email", "plan"] }); // [!code highlight]
+    return JSON.stringify(users);
+  },
+});
+```
+
+### Enable parallel tool calls
+
+When the model needs data from multiple sources, it can call several tools in a single turn if `parallelToolCalls` is enabled (the default). All tools execute concurrently instead of sequentially.
+
+```ts title="parallel-tools.ts"
+const agent = new Agent({
+  name: "dashboard",
+  model,
+  tools: [getRevenue, getActiveUsers, getErrorRate],
+  modelSettings: {
+    parallelToolCalls: true, // default — tools run concurrently // [!code highlight]
+  },
+});
+
+// "Show me today's metrics" → model calls all 3 tools in parallel
+// One model call + one batch of tool executions instead of three sequential rounds
+```
+
+If you have explicitly set `parallelToolCalls: false`, consider re-enabling it for agents where tool execution order does not matter.
+
+## Use stop_on_first_tool for extraction
+
+When an agent exists solely to call a tool and return its result, the default behavior wastes a model call. After the tool executes, the model is called again to summarize the result in natural language. With `stop_on_first_tool`, the run ends immediately after tool execution — no second model call.
+
+```ts title="stop-on-first.ts"
+import { Agent, run, tool } from "stratus/core";
+import { z } from "zod";
+
+const fetchOrder = tool({
+  name: "fetch_order",
+  description: "Fetch an order by ID",
+  parameters: z.object({ orderId: z.string() }),
+  execute: async (ctx, { orderId }) => {
+    const order = await ctx.db.orders.findById(orderId);
+    return JSON.stringify(order);
+  },
+});
+
+const orderFetcher = new Agent({
+  name: "order_fetcher",
+  model,
+  instructions: "Fetch the order the user is asking about.",
+  tools: [fetchOrder],
+  toolUseBehavior: "stop_on_first_tool", // [!code highlight]
+});
+
+const result = await run(orderFetcher, "Get order ORD-1234");
+console.log(result.output); // Raw JSON from fetchOrder — no model summary
+```
+
+This eliminates the second model call entirely, cutting total latency roughly in half for single-tool agents.
+
+<Callout type="info">
+When `stop_on_first_tool` is active, `result.output` contains the raw tool return value. The model does not format or summarize the result. This is ideal when the caller is code (not a human) and can parse the tool output directly.
+</Callout>
+
+## Abort long-running operations
+
+Use `AbortSignal.timeout()` to enforce a hard deadline on agent runs. If the model or a tool takes too long, the run throws `RunAbortedError` instead of hanging indefinitely.
+
+```ts title="timeout.ts"
+import { Agent, run, RunAbortedError } from "stratus/core";
+
+const agent = new Agent({
+  name: "researcher",
+  model,
+  tools: [searchDocs, queryDatabase],
+});
+
+try {
+  const result = await run(agent, "Find all orders from last month", {
+    signal: AbortSignal.timeout(10_000), // Hard 10-second deadline // [!code highlight]
+  });
+  console.log(result.output);
+} catch (error) {
+  if (error instanceof RunAbortedError) {
+    console.log("Agent timed out — returning cached result");
+    return getCachedResult(); // Fallback to cached data // [!code highlight]
+  }
+  throw error;
+}
+```
+
+The signal propagates to model API calls and tool `execute` functions. Any `fetch` call or database query that accepts an `AbortSignal` cancels immediately when the deadline hits.
+
+For HTTP endpoints, combine timeout with client disconnect detection:
+
+```ts title="server-timeout.ts"
+app.post("/chat", async (req, res) => {
+  const ac = new AbortController();
+  req.on("close", () => ac.abort());                       // Client disconnected
+  const timeout = setTimeout(() => ac.abort(), 15_000);     // 15-second hard limit // [!code highlight]
+
+  try {
+    const { stream: s } = stream(agent, req.body.message, {
+      signal: ac.signal,
+    });
+    // ... stream events to response
+  } finally {
+    clearTimeout(timeout);
+  }
+});
+```
+
+## Measure with tracing
+
+Guessing at bottlenecks wastes time. Wrap your agent calls in `withTrace()` to see exactly where time is spent — model calls vs. tool execution vs. guardrails.
+
+```ts title="trace-latency.ts"
+import { withTrace, run, Agent, tool } from "stratus/core";
+import { z } from "zod";
+
+const agent = new Agent({
+  name: "researcher",
+  model,
+  tools: [searchDocs, queryDatabase],
+});
+
+const { result, trace } = await withTrace("research_query", async () => { // [!code highlight]
+  return run(agent, "What were last quarter's top-selling products?");
+});
+
+// Break down time by span type
+const modelSpans = trace.spans.filter(s => s.type === "model_call"); // [!code highlight]
+const toolSpans = trace.spans.filter(s => s.type === "tool_execution"); // [!code highlight]
+
+const modelTime = modelSpans.reduce((sum, s) => sum + s.duration, 0);
+const toolTime = toolSpans.reduce((sum, s) => sum + s.duration, 0);
+
+console.log(`Total: ${trace.duration}ms`);
+console.log(`Model calls: ${modelSpans.length} (${modelTime}ms)`); // [!code highlight]
+console.log(`Tool executions: ${toolSpans.length} (${toolTime}ms)`); // [!code highlight]
+console.log(`Overhead: ${trace.duration! - modelTime - toolTime}ms`);
+```
+
+Use this data to decide where to optimize:
+
+- **Model time dominates** — try a smaller model, shorter instructions, or `maxTokens`
+- **Tool time dominates** — optimize your tool implementations, add caching, or use faster data sources
+- **Many model calls** — reduce tool round-trips or use `stop_on_first_tool`
+
+<Callout type="info">
+Tracing is opt-in. When `withTrace()` is not used, all tracing code paths are skipped with zero overhead. There is no performance cost to having tracing code in your production agents — it only runs when you activate it.
+</Callout>
+
+## Summary
+
+| Technique | Impact | Tradeoff |
+| --- | --- | --- |
+| Use `stream()` | Perceived latency drops to ~200ms time-to-first-token | Total generation time is unchanged |
+| Smaller model | 2-5x faster responses for simple tasks | Lower capability ceiling for complex reasoning |
+| Shorter instructions | Faster time-to-first-token, lower prompt cost | Must be precise — vague instructions hurt accuracy |
+| Set `maxTokens` | Predictable, bounded response times | Output may truncate if set too low |
+| Return complete data from tools | Fewer model round-trips | Larger tool responses consume more context tokens |
+| `parallelToolCalls` | Concurrent tool execution instead of sequential | Model must support parallel calls (default in gpt-5.2) |
+| `stop_on_first_tool` | Eliminates the second model call entirely | No model-formatted summary — raw tool output only |
+| `AbortSignal.timeout()` | Hard deadline prevents runaway operations | Incomplete results on timeout — need a fallback |
+| `withTrace()` | Data-driven optimization instead of guessing | Small overhead when active (zero when inactive) |
+
+## Next steps
+
+<Cards>
+  <Card title="Streaming" href="/docs/streaming">
+    Full reference for stream events and abort signals
+  </Card>
+  <Card title="Model Settings" href="/docs/model-settings">
+    Configure maxTokens, toolChoice, parallelToolCalls, and more
+  </Card>
+  <Card title="Tracing" href="/docs/tracing">
+    Span-based observability for model calls and tool execution
+  </Card>
+  <Card title="Abort & Cancellation" href="/docs/abort-signal">
+    Timeout patterns and signal propagation
+  </Card>
+</Cards>

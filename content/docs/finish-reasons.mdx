@@ -1,0 +1,221 @@
+---
+title: Finish Reasons
+description: Understand why a model stopped generating and how the run loop responds
+---
+
+Every model response includes a `finishReason` that tells you why the model stopped generating. The run loop inspects this value to decide what happens next -- whether to execute tool calls, return a result, or throw an error.
+
+## Finish reason values
+
+| Value | Meaning | Run loop behavior |
+| --- | --- | --- |
+| `stop` | The model finished naturally. It produced a complete response. | Returns the result. The run is done. |
+| `tool_calls` | The model wants to call one or more tools. | Executes the tool calls, then calls the model again with the results. |
+| `length` | The response was truncated because it hit the `maxTokens` limit. | Returns the partial result. No error is thrown. |
+| `content_filter` | Azure's content filter blocked the request or response. | Throws a `ContentFilterError`. The run does not continue. |
+
+## How the run loop uses finish reasons
+
+When the model responds, the run loop checks the response and branches:
+
+<Steps>
+<Step>
+
+### Model returns a response
+
+The run loop calls the model and receives a `ModelResponse` containing `content`, `toolCalls`, and `finishReason`.
+
+</Step>
+<Step>
+
+### Check for tool calls
+
+If `toolCalls` is non-empty (finish reason is `tool_calls`), the run loop executes all tool calls in parallel, appends the results as tool messages, and calls the model again. This repeats until the model responds without tool calls or `maxTurns` is exceeded.
+
+</Step>
+<Step>
+
+### No tool calls -- return the result
+
+If `toolCalls` is empty, the run is finished. The model's text output becomes `result.output`. The finish reason is stored on `result.finishReason` -- typically `stop` or `length`.
+
+</Step>
+</Steps>
+
+```
+Model response
+├── toolCalls present?
+│   ├── Yes → execute tools → call model again (loop)
+│   └── No  → finishReason is "stop" or "length"
+│       └── return RunResult
+└── finishReason is "content_filter"?
+    └── Yes → throw ContentFilterError
+```
+
+<Callout type="info">
+The `content_filter` finish reason is intercepted at the model layer before the run loop sees it. `AzureChatCompletionsModel` throws a `ContentFilterError` immediately, so the run loop never receives a response with `finishReason: "content_filter"`.
+</Callout>
+
+## Accessing finishReason
+
+### From `run()`
+
+```ts title="run-finish-reason.ts"
+import { Agent, run } from "stratus/core";
+
+const agent = new Agent({ name: "assistant", model });
+const result = await run(agent, "What is the capital of France?");
+
+console.log(result.finishReason); // "stop"
+console.log(result.output);       // "The capital of France is Paris."
+```
+
+### From `stream()`
+
+```ts title="stream-finish-reason.ts"
+import { Agent, stream } from "stratus/core";
+
+const agent = new Agent({ name: "writer", model });
+const { stream: s, result } = stream(agent, "Write a haiku");
+
+for await (const event of s) {
+  if (event.type === "content_delta") {
+    process.stdout.write(event.content);
+  }
+  if (event.type === "done") {
+    // Per-call finish reason from this model response
+    console.log(event.response.finishReason); // [!code highlight]
+  }
+}
+
+const finalResult = await result;
+console.log(finalResult.finishReason); // "stop" — from the last model call // [!code highlight]
+```
+
+### From a session
+
+```ts title="session-finish-reason.ts"
+import { createSession } from "stratus/core";
+
+const session = createSession({ model, instructions: "You are a helpful assistant." });
+
+session.send("Explain TypeScript generics");
+for await (const event of session.stream()) {
+  if (event.type === "content_delta") process.stdout.write(event.content);
+}
+
+const result = await session.result;
+console.log(result.finishReason); // "stop" // [!code highlight]
+```
+
+## Finish reasons vs errors
+
+Finish reasons and errors are different categories. A finish reason is part of a successful model response. An error means something went wrong and no usable response was produced.
+
+| Condition | Type | How it surfaces | Recoverable? |
+| --- | --- | --- | --- |
+| `stop` | Finish reason | `result.finishReason` | N/A -- this is the normal case |
+| `tool_calls` | Finish reason | `result.finishReason` (of the last call) | N/A -- the run loop handles this |
+| `length` | Finish reason | `result.finishReason` | Yes -- increase `maxTokens` or shorten input |
+| `content_filter` | Thrown error | `catch (e) { e instanceof ContentFilterError }` | Depends -- rephrase the input or output |
+| API failure | Thrown error | `catch (e) { e instanceof ModelError }` | Retry or check credentials |
+| Timeout | Thrown error | `catch (e) { e instanceof RunAbortedError }` | Increase timeout or simplify the task |
+| Too many turns | Thrown error | `catch (e) { e instanceof MaxTurnsExceededError }` | Increase `maxTurns` |
+
+<Callout type="warn">
+A `length` finish reason is **not** an error. The run completes successfully, but the output may be incomplete. Always check `finishReason` if you need to guarantee the model finished its response.
+</Callout>
+
+## Handling truncated responses
+
+When `finishReason` is `"length"`, the model hit the token limit before finishing. The output is cut off mid-sentence or mid-thought. Here are your options:
+
+**Increase `maxTokens`** -- Give the model more room to respond.
+
+```ts title="increase-max-tokens.ts"
+const agent = new Agent({
+  name: "writer",
+  model,
+  modelSettings: {
+    maxTokens: 4096, // [!code highlight]
+  },
+});
+
+const result = await run(agent, "Write a detailed analysis of TypeScript's type system");
+if (result.finishReason === "length") {
+  console.warn("Response was truncated — consider increasing maxTokens");
+}
+```
+
+**Shorten the input** -- Reduce the prompt length so more tokens are available for the response.
+
+**Split into multiple calls** -- Break a large task into smaller, focused prompts that each fit within the token limit.
+
+**Detect and retry** -- Check the finish reason and automatically retry with a higher limit.
+
+```ts title="retry-on-truncation.ts"
+import { Agent, run } from "stratus/core";
+
+const agent = new Agent({ name: "writer", model });
+
+let result = await run(agent, "Summarize this document", {
+  context: { maxTokens: 1024 },
+});
+
+if (result.finishReason === "length") { // [!code highlight]
+  const retryAgent = agent.clone({
+    modelSettings: { maxTokens: 4096 },
+  });
+  result = await run(retryAgent, "Summarize this document");
+}
+
+console.log(result.output);
+```
+
+## In streaming
+
+During streaming, the finish reason is not available until the model finishes its response. It arrives in the final `done` event for each model call.
+
+```ts title="streaming-finish-reason.ts"
+import { Agent, stream } from "stratus/core";
+
+const agent = new Agent({ name: "assistant", model });
+const { stream: s, result } = stream(agent, "Tell me a story");
+
+for await (const event of s) {
+  switch (event.type) {
+    case "content_delta":
+      process.stdout.write(event.content);
+      break;
+    case "done":
+      // Available here — one 'done' event per model call
+      console.log("\nFinish reason:", event.response.finishReason); // [!code highlight]
+      break;
+  }
+}
+
+// Also available on the final RunResult
+const finalResult = await result;
+console.log("Last finish reason:", finalResult.finishReason);
+```
+
+<Callout>
+If the run involves tool calls, you will see multiple `done` events -- one per model call. The `finishReason` on the `RunResult` is always from the **last** model call in the run.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Running Agents" href="/docs/running-agents">
+    Execute agents with run(), stream(), and prompt()
+  </Card>
+  <Card title="Streaming" href="/docs/streaming">
+    Real-time streaming events and abort signals
+  </Card>
+  <Card title="Errors" href="/docs/errors">
+    Full error hierarchy including ContentFilterError
+  </Card>
+  <Card title="Model Settings" href="/docs/model-settings">
+    Configure maxTokens, temperature, and other parameters
+  </Card>
+</Cards>

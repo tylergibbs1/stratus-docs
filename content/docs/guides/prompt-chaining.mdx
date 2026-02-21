@@ -1,0 +1,575 @@
+---
+title: "Guide: Prompt Chaining"
+description: Break complex tasks into sequential agent runs for better accuracy and control
+---
+
+Prompt chaining breaks a complex task into a sequence of focused agent runs, where each step's output feeds into the next. Instead of asking one agent to do everything, you split the work into stages that are easier to prompt, test, and debug independently.
+
+In this guide, you will:
+
+- **Chain sequential runs** -- pass the output of one agent directly into the next
+- **Use structured output between steps** -- get typed data from step 1 and feed it into step 2 with full type safety
+- **Run steps in parallel** -- execute independent steps concurrently with `Promise.all()` and merge the results
+- **Build self-correction chains** -- generate, review, and refine output across three agents
+- **Choose between chaining and subagents** -- understand when you should control the flow versus letting the model decide
+- **Chain with sessions** -- preserve conversation history across a multi-step pipeline
+- **Handle errors at each step** -- retry, skip, or abort depending on where the failure occurs
+- **Trace the full chain** -- wrap everything in `withTrace()` for end-to-end observability
+
+## Basic chaining
+
+The simplest chain runs two agents in sequence. Agent A produces output, and you pass that output as input to Agent B.
+
+```ts title="basic-chain.ts"
+import { Agent, run } from "stratus/core";
+import { AzureResponsesModel } from "stratus";
+
+const model = new AzureResponsesModel({
+  endpoint: process.env.AZURE_ENDPOINT!,
+  apiKey: process.env.AZURE_API_KEY!,
+  deployment: "gpt-5.2",
+});
+
+const researcher = new Agent({
+  name: "researcher",
+  model,
+  instructions: `Research the given topic and produce detailed notes.
+    Include key facts, statistics, and relevant context.`,
+});
+
+const writer = new Agent({
+  name: "writer",
+  model,
+  instructions: `You are a blog writer. Given research notes,
+    write a concise, engaging blog post. Use a professional tone.`,
+});
+
+// Step 1: Research
+const researchResult = await run(researcher, "The impact of AI on healthcare"); // [!code highlight]
+
+// Step 2: Write using the research output
+const writeResult = await run(writer, researchResult.output); // [!code highlight]
+
+console.log(writeResult.output);
+```
+
+Each `run()` call is independent. The researcher has no knowledge of the writer, and the writer has no knowledge of the researcher. You control the data flow between them explicitly.
+
+<Callout type="info">
+Chaining gives you full control over what passes between steps. You can filter, transform, or validate the output of step 1 before passing it to step 2. This is the key difference from handoffs, where the model controls the transfer.
+</Callout>
+
+## Structured handoff between steps
+
+When you need typed data between steps, use `outputType` on the first agent. Stratus parses and validates the output against your Zod schema, and you get a fully typed `finalOutput` to pass downstream.
+
+```ts title="structured-chain.ts"
+import { Agent, run } from "stratus/core";
+import { AzureResponsesModel } from "stratus";
+import { z } from "zod";
+
+const model = new AzureResponsesModel({
+  endpoint: process.env.AZURE_ENDPOINT!,
+  apiKey: process.env.AZURE_API_KEY!,
+  deployment: "gpt-5.2",
+});
+
+// Step 1 schema: structured analysis
+const AnalysisSchema = z.object({
+  topic: z.string().describe("The main topic analyzed"),
+  keyPoints: z.array(z.string()).describe("3-5 key points"),
+  sentiment: z.enum(["positive", "negative", "neutral", "mixed"]),
+  targetAudience: z.string().describe("Who this content is for"),
+});
+
+const analyzer = new Agent({
+  name: "analyzer",
+  model,
+  instructions: `Analyze the given text. Extract key points, determine
+    overall sentiment, and identify the target audience.`,
+  outputType: AnalysisSchema, // [!code highlight]
+});
+
+const copywriter = new Agent({
+  name: "copywriter",
+  model,
+  instructions: `Write marketing copy based on the analysis provided.
+    Tailor the tone to the target audience and emphasize key points.`,
+});
+
+// Step 1: Analyze -- finalOutput is typed as z.infer<typeof AnalysisSchema>
+const analysis = await run(analyzer, productDescription);
+const { keyPoints, sentiment, targetAudience } = analysis.finalOutput; // [!code highlight]
+
+// Step 2: Write -- pass structured data as a formatted prompt
+const copy = await run(
+  copywriter,
+  `Write marketing copy for a ${sentiment} product.
+  Target audience: ${targetAudience}
+  Key points to emphasize:
+  ${keyPoints.map((p) => `- ${p}`).join("\n")}`,
+);
+
+console.log(copy.output);
+```
+
+The `finalOutput` on step 1 is parsed and validated by Zod. If the model returns JSON that does not match your schema, Stratus throws an `OutputParseError` before step 2 ever runs. This means step 2 always receives clean, typed data.
+
+## Parallel steps
+
+When two or more steps are independent, run them concurrently with `Promise.all()`. Combine the results in a final step.
+
+```ts title="parallel-chain.ts"
+import { Agent, run } from "stratus/core";
+import { AzureResponsesModel } from "stratus";
+import { z } from "zod";
+
+const model = new AzureResponsesModel({
+  endpoint: process.env.AZURE_ENDPOINT!,
+  apiKey: process.env.AZURE_API_KEY!,
+  deployment: "gpt-5.2",
+});
+
+const ProConsSchema = z.object({
+  pros: z.array(z.string()),
+  cons: z.array(z.string()),
+});
+
+const prosAgent = new Agent({
+  name: "pros_analyst",
+  model,
+  instructions: "List the strongest arguments IN FAVOR of the given proposal.",
+  outputType: ProConsSchema,
+});
+
+const consAgent = new Agent({
+  name: "cons_analyst",
+  model,
+  instructions: "List the strongest arguments AGAINST the given proposal.",
+  outputType: ProConsSchema,
+});
+
+const synthesizer = new Agent({
+  name: "synthesizer",
+  model,
+  instructions: `Given pro and con arguments, write a balanced analysis
+    with a clear recommendation. Be concise.`,
+});
+
+const proposal = "Should our company adopt a 4-day work week?";
+
+// Steps 1a and 1b: Run in parallel
+const [prosResult, consResult] = await Promise.all([ // [!code highlight]
+  run(prosAgent, proposal), // [!code highlight]
+  run(consAgent, proposal), // [!code highlight]
+]); // [!code highlight]
+
+// Step 2: Synthesize
+const synthesis = await run(
+  synthesizer,
+  `Proposal: ${proposal}
+
+  Arguments for:
+  ${prosResult.finalOutput.pros.map((p) => `- ${p}`).join("\n")}
+
+  Arguments against:
+  ${consResult.finalOutput.cons.map((c) => `- ${c}`).join("\n")}`,
+);
+
+console.log(synthesis.output);
+```
+
+Both analysts run at the same time, cutting total latency roughly in half. The synthesizer waits for both to finish before producing the final output.
+
+<Callout type="info">
+`Promise.all()` fails fast -- if either parallel step throws, the entire chain stops. See [Error handling in chains](#error-handling-in-chains) for patterns to handle partial failures.
+</Callout>
+
+## Self-correction chain
+
+A generate-review-refine chain improves output quality by adding an explicit grading step. Agent 1 generates a draft, Agent 2 reviews it and produces structured feedback, and Agent 3 rewrites the draft using that feedback.
+
+```ts title="self-correction.ts"
+import { Agent, run } from "stratus/core";
+import { AzureResponsesModel } from "stratus";
+import { z } from "zod";
+
+const model = new AzureResponsesModel({
+  endpoint: process.env.AZURE_ENDPOINT!,
+  apiKey: process.env.AZURE_API_KEY!,
+  deployment: "gpt-5.2",
+});
+
+// Step 1: Generate
+const drafter = new Agent({
+  name: "drafter",
+  model,
+  instructions: `Write a clear, professional email based on the request.
+    Include a subject line, greeting, body, and sign-off.`,
+});
+
+// Step 2: Review
+const ReviewSchema = z.object({
+  grade: z.enum(["pass", "needs_revision"]),
+  issues: z.array(z.string()).describe("Specific problems to fix"),
+  suggestions: z.array(z.string()).describe("Concrete improvements"),
+});
+
+const reviewer = new Agent({
+  name: "reviewer",
+  model,
+  instructions: `Review the email draft for:
+    - Clarity and conciseness
+    - Professional tone
+    - Grammar and spelling
+    - Whether it addresses the original request
+    Grade it as "pass" or "needs_revision" with specific feedback.`,
+  outputType: ReviewSchema, // [!code highlight]
+});
+
+// Step 3: Refine
+const refiner = new Agent({
+  name: "refiner",
+  model,
+  instructions: `Rewrite the email draft incorporating all the review feedback.
+    Fix every listed issue and apply every suggestion.`,
+});
+
+// Run the chain
+const draft = await run(drafter, "Write an email declining a meeting invitation politely");
+const review = await run(reviewer, draft.output);
+
+if (review.finalOutput.grade === "pass") { // [!code highlight]
+  console.log("Draft passed review:");
+  console.log(draft.output);
+} else {
+  // Refine using the structured feedback
+  const refined = await run(
+    refiner,
+    `Original draft:\n${draft.output}\n\n` +
+    `Issues:\n${review.finalOutput.issues.map((i) => `- ${i}`).join("\n")}\n\n` + // [!code highlight]
+    `Suggestions:\n${review.finalOutput.suggestions.map((s) => `- ${s}`).join("\n")}`, // [!code highlight]
+  );
+  console.log("Refined output:");
+  console.log(refined.output);
+}
+```
+
+The review step acts as a gate. If the draft passes, you skip the refine step entirely. If it fails, the structured feedback gives the refiner precise instructions on what to fix.
+
+You can loop this pattern for iterative refinement:
+
+```ts title="iterative-refinement.ts"
+let currentDraft = (await run(drafter, userRequest)).output;
+
+for (let attempt = 0; attempt < 3; attempt++) { // [!code highlight]
+  const review = await run(reviewer, currentDraft);
+
+  if (review.finalOutput.grade === "pass") {
+    console.log(`Draft passed on attempt ${attempt + 1}`);
+    break;
+  }
+
+  const refined = await run(
+    refiner,
+    `Draft:\n${currentDraft}\n\nFeedback:\n${review.finalOutput.issues.join("\n")}`,
+  );
+  currentDraft = refined.output;
+}
+
+console.log(currentDraft);
+```
+
+## Using subagents for orchestration
+
+Chaining and subagents both connect multiple agents, but they differ in who controls the flow.
+
+| | Prompt chaining | Subagents |
+|---|---|---|
+| **Who decides** | Your code | The model |
+| **Flow** | Fixed sequence you define | Dynamic, model picks which subagent to call |
+| **Data passing** | Explicit -- you format the input | Implicit -- model generates the tool call arguments |
+| **Best for** | Pipelines with known steps | Open-ended tasks where the model should decide |
+
+**Use chaining when** the steps are known ahead of time. A content pipeline (research, draft, review, publish) always runs in the same order. You want to inspect and transform data between steps.
+
+**Use subagents when** the model needs to decide which agents to invoke and in what order. A research orchestrator does not know upfront whether it needs the web researcher, the data analyst, or both.
+
+```ts title="chaining-vs-subagents.ts"
+import { Agent, run, subagent } from "stratus/core";
+import { z } from "zod";
+
+// CHAINING: You control the flow
+async function contentPipeline(topic: string) {
+  const research = await run(researcher, topic);          // Always step 1
+  const draft = await run(writer, research.output);       // Always step 2
+  const review = await run(reviewer, draft.output);       // Always step 3
+  return review;
+}
+
+// SUBAGENTS: Model controls the flow
+const researchSub = subagent({
+  agent: researcher,
+  inputSchema: z.object({ topic: z.string() }),
+  mapInput: (p) => `Research: ${p.topic}`,
+});
+
+const analysisSub = subagent({
+  agent: analyst,
+  inputSchema: z.object({ data: z.string() }),
+  mapInput: (p) => `Analyze: ${p.data}`,
+});
+
+const orchestrator = new Agent({
+  name: "orchestrator",
+  model,
+  instructions: "Answer questions using research and analysis subagents as needed.",
+  subagents: [researchSub, analysisSub], // Model decides which to call
+});
+```
+
+<Callout type="info">
+You can combine both patterns. Use chaining for the overall pipeline structure, and subagents within individual steps where the model needs flexibility.
+</Callout>
+
+## Chaining with sessions
+
+When steps in a chain need to share conversation history -- for example, a multi-turn interview followed by a summary -- use sessions to preserve context across the chain.
+
+```ts title="session-chain.ts"
+import { createSession, run, Agent } from "stratus/core";
+import { AzureResponsesModel } from "stratus";
+import { z } from "zod";
+
+const model = new AzureResponsesModel({
+  endpoint: process.env.AZURE_ENDPOINT!,
+  apiKey: process.env.AZURE_API_KEY!,
+  deployment: "gpt-5.2",
+});
+
+// Step 1: Gather information via multi-turn session
+const session = createSession({
+  model,
+  instructions: `You are an intake specialist. Ask the user about their
+    project requirements. Ask one question at a time. After 3 questions,
+    summarize what you've learned.`,
+});
+
+const questions = [
+  "I need a mobile app for my restaurant",
+  "We need online ordering, table reservations, and a loyalty program",
+  "Budget is around $50k, timeline is 3 months",
+];
+
+for (const answer of questions) {
+  session.send(answer);
+  for await (const event of session.stream()) {
+    if (event.type === "content_delta") process.stdout.write(event.content);
+  }
+  console.log("\n");
+}
+
+// Get the session result with full conversation context
+const intakeResult = await session.result;
+const snapshot = session.save(); // [!code highlight]
+
+// Step 2: Generate a proposal from the conversation summary
+const ScopeSchema = z.object({
+  features: z.array(z.string()),
+  estimatedWeeks: z.number(),
+  estimatedCost: z.number(),
+  risks: z.array(z.string()),
+});
+
+const proposalAgent = new Agent({
+  name: "proposal_writer",
+  model,
+  instructions: `Generate a project scope document from the intake summary.
+    Be specific about features, timeline, cost, and risks.`,
+  outputType: ScopeSchema,
+});
+
+const proposal = await run(proposalAgent, intakeResult.output); // [!code highlight]
+
+console.log("Proposed features:", proposal.finalOutput.features);
+console.log("Estimated cost:", proposal.finalOutput.estimatedCost);
+```
+
+The session handles the multi-turn intake conversation, then `save()` preserves the state in case you need to resume later. The proposal agent runs as a separate, stateless `run()` call using the session's output.
+
+## Error handling in chains
+
+Each step in a chain can fail independently. Handle failures based on where they occur and whether the chain can continue.
+
+<Tabs items={["Step-by-step", "Parallel with fallbacks", "Retry wrapper"]}>
+<Tab value="Step-by-step">
+
+Catch errors at each step and decide whether to abort or continue with a fallback:
+
+```ts title="error-handling.ts"
+import { Agent, run, OutputParseError, MaxTurnsExceededError } from "stratus/core";
+
+async function safePipeline(input: string) {
+  // Step 1: Analyze
+  let analysis;
+  try {
+    analysis = await run(analyzer, input);
+  } catch (error) {
+    if (error instanceof OutputParseError) {
+      console.error("Analysis output was malformed, using fallback");
+      analysis = { finalOutput: { keyPoints: [input], sentiment: "neutral" as const } };
+    } else {
+      throw error; // Unknown error, abort the chain
+    }
+  }
+
+  // Step 2: Write (depends on step 1)
+  let draft;
+  try {
+    draft = await run(writer, formatAnalysis(analysis.finalOutput));
+  } catch (error) {
+    if (error instanceof MaxTurnsExceededError) {
+      console.error("Writer exceeded max turns, returning partial output");
+      return { output: "Draft generation timed out", analysis: analysis.finalOutput };
+    }
+    throw error;
+  }
+
+  return { output: draft.output, analysis: analysis.finalOutput };
+}
+```
+
+</Tab>
+<Tab value="Parallel with fallbacks">
+
+Use `Promise.allSettled()` instead of `Promise.all()` to continue even if some parallel steps fail:
+
+```ts title="parallel-fallback.ts"
+const results = await Promise.allSettled([ // [!code highlight]
+  run(prosAgent, proposal),
+  run(consAgent, proposal),
+]);
+
+const pros = results[0].status === "fulfilled"
+  ? results[0].value.finalOutput.pros
+  : ["Unable to generate pro arguments"];
+
+const cons = results[1].status === "fulfilled"
+  ? results[1].value.finalOutput.cons
+  : ["Unable to generate con arguments"];
+
+// Synthesizer still runs with whatever we got
+const synthesis = await run(synthesizer, formatArguments(pros, cons));
+```
+
+</Tab>
+<Tab value="Retry wrapper">
+
+Wrap any step in a retry helper for transient failures:
+
+```ts title="retry.ts"
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries = 2,
+  delayMs = 1000,
+): Promise<T> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      if (attempt === maxRetries) throw error;
+      console.warn(`Attempt ${attempt + 1} failed, retrying in ${delayMs}ms...`);
+      await new Promise((r) => setTimeout(r, delayMs * (attempt + 1)));
+    }
+  }
+  throw new Error("Unreachable");
+}
+
+// Use it in a chain
+const research = await withRetry(() => run(researcher, topic)); // [!code highlight]
+const draft = await withRetry(() => run(writer, research.output), 3, 2000); // [!code highlight]
+```
+
+</Tab>
+</Tabs>
+
+<Callout type="warn">
+The `MaxTurnsExceededError` and `RunAbortedError` errors terminate a single `run()` call, not the entire chain. Your chain code decides whether to abort, retry, or continue with fallback data.
+</Callout>
+
+## Tracing chains
+
+Wrap your entire chain in a single `withTrace()` call. Every `run()` inside the callback is captured as spans in the same trace, giving you end-to-end visibility.
+
+```ts title="traced-chain.ts"
+import { Agent, run, withTrace } from "stratus/core";
+import { AzureResponsesModel } from "stratus";
+
+const model = new AzureResponsesModel({
+  endpoint: process.env.AZURE_ENDPOINT!,
+  apiKey: process.env.AZURE_API_KEY!,
+  deployment: "gpt-5.2",
+});
+
+const researcher = new Agent({ name: "researcher", model, instructions: "..." });
+const writer = new Agent({ name: "writer", model, instructions: "..." });
+const reviewer = new Agent({ name: "reviewer", model, instructions: "..." });
+
+const { result, trace } = await withTrace("content_pipeline", async () => { // [!code highlight]
+  const research = await run(researcher, "AI in healthcare");
+  const draft = await run(writer, research.output);
+  const review = await run(reviewer, draft.output);
+  return review;
+}); // [!code highlight]
+
+// Inspect the trace
+console.log(`Pipeline took ${trace.duration}ms`);
+console.log(`Total spans: ${trace.spans.length}`);
+
+for (const span of trace.spans) {
+  console.log(`  ${span.name}: ${span.duration}ms`);
+}
+// model_call:researcher: 2340ms
+// model_call:writer: 3120ms
+// model_call:reviewer: 1890ms
+```
+
+Each `run()` inside `withTrace()` automatically records its model calls, tool executions, and guardrail checks as child spans. The trace captures the full chain in a single object you can log, export, or visualize.
+
+For parallel chains, the trace shows overlapping spans:
+
+```ts title="traced-parallel.ts"
+const { result, trace } = await withTrace("parallel_analysis", async () => {
+  const [pros, cons] = await Promise.all([
+    run(prosAgent, proposal),
+    run(consAgent, proposal),
+  ]);
+  return run(synthesizer, formatArguments(pros, cons));
+});
+
+// Parallel spans overlap in time
+for (const span of trace.spans) {
+  const start = (span.startTime - trace.startTime).toFixed(0);
+  console.log(`  ${span.name}: started at +${start}ms, took ${span.duration}ms`);
+}
+// model_call:pros_analyst: started at +2ms, took 1840ms
+// model_call:cons_analyst: started at +3ms, took 2100ms
+// model_call:synthesizer: started at +2105ms, took 1560ms
+```
+
+## Next steps
+
+<Cards>
+  <Card title="Structured Output" href="/docs/structured-output">
+    Typed data between chain steps with Zod
+  </Card>
+  <Card title="Subagents" href="/docs/subagents">
+    Model-driven orchestration for dynamic workflows
+  </Card>
+  <Card title="Sessions" href="/docs/sessions">
+    Multi-turn chains with persistent history
+  </Card>
+  <Card title="Tracing" href="/docs/tracing">
+    End-to-end observability for agent pipelines
+  </Card>
+</Cards>
