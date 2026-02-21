@@ -13,6 +13,7 @@ import { Tab, Tabs } from "fumadocs-ui/components/tabs";
 import { Step, Steps } from "fumadocs-ui/components/steps";
 import { File, Folder, Files } from "fumadocs-ui/components/files";
 import { Accordion, Accordions } from "fumadocs-ui/components/accordion";
+import { LLMCopyButton } from "@/components/llm-copy-button";
 
 const mdxComponents = {
 	...defaultMdxComponents,
@@ -43,6 +44,9 @@ export default async function Page(props: {
 		<DocsPage toc={page.data.toc} full={page.data.full}>
 			<DocsTitle>{page.data.title}</DocsTitle>
 			<DocsDescription>{page.data.description}</DocsDescription>
+			<div className="flex flex-row items-center gap-2 border-b pb-4">
+				<LLMCopyButton markdownUrl={`${page.url}.mdx`} />
+			</div>
 			<DocsBody>
 				<MDX components={mdxComponents} />
 			</DocsBody>
