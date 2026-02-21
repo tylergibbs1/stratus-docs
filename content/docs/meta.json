@@ -9,6 +9,7 @@
 		"running-agents",
 		"context",
 		"tools",
+		"built-in-tools",
 		"subagents",
 		"sessions",
 		"streaming",

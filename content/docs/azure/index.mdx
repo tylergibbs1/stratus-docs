@@ -33,6 +33,7 @@ const model = new AzureResponsesModel({
 | `apiKey` | `string` | **Required.** API key for authentication |
 | `deployment` | `string` | **Required.** Sent as `model` in request body |
 | `apiVersion` | `string` | API version (default: `"2025-04-01-preview"`) |
+| `store` | `boolean` | Whether to persist responses server-side (default: `false`). Enable for `previous_response_id` optimization. |
 
 ## AzureChatCompletionsModel
 
@@ -59,7 +60,7 @@ const model = new AzureChatCompletionsModel({
 | `apiVersion` | `string` | API version (default: `"2025-03-01-preview"`) |
 
 <Callout type="info">
-Both models are interchangeable. Swap one for the other without changing any agent, tool, or session code.
+Both models are interchangeable for function tools. Swap one for the other without changing any agent, tool, or session code. [Built-in tools](/built-in-tools) (web search, code interpreter, MCP, image generation) are only supported by `AzureResponsesModel`.
 </Callout>
 
 ## Endpoint Formats
@@ -150,11 +151,14 @@ The `options` parameter is optional and backward compatible. When provided, `sig
 ```ts title="types.ts"
 interface ModelRequest {
   messages: ChatMessage[];
-  tools?: ToolDefinition[];
+  tools?: (ToolDefinition | Record<string, unknown>)[];
   modelSettings?: ModelSettings;
   responseFormat?: ResponseFormat;
+  previousResponseId?: string; // [!code highlight]
 }
 ```
+
+The `tools` array accepts both `ToolDefinition` (function tools) and `Record<string, unknown>` (hosted tool definitions). `previousResponseId` is forwarded by the run loop for Responses API optimization when `store` is enabled.
 
 ### ModelResponse
 
@@ -163,9 +167,12 @@ interface ModelResponse {
   content: string | null;
   toolCalls: ToolCall[];
   usage?: UsageInfo;
-  finishReason?: FinishReason; // [!code highlight]
+  finishReason?: FinishReason;
+  responseId?: string; // [!code highlight]
 }
 ```
+
+`responseId` is populated by `AzureResponsesModel` and tracked across turns by the run loop. It's also available on `RunResult.responseId`.
 
 ### UsageInfo
 

@@ -1,0 +1,190 @@
+---
+title: Built-in Tools
+description: Server-side tools for web search, code execution, MCP, and image generation
+---
+
+Built-in tools run server-side on Azure's infrastructure. Unlike [function tools](/tools) that execute your TypeScript code, built-in tools are handled entirely by the API. No local execution, no tool loop overhead.
+
+<Callout type="warn">
+Built-in tools require `AzureResponsesModel`. They are not supported by `AzureChatCompletionsModel`.
+</Callout>
+
+## Web Search
+
+Give your agent access to live web search results.
+
+```ts title="web-search.ts"
+import { AzureResponsesModel } from "stratus-sdk/azure";
+import { Agent, run, webSearchTool } from "stratus-sdk/core";
+
+const agent = new Agent({
+  name: "researcher",
+  model,
+  tools: [webSearchTool()],
+});
+
+const result = await run(agent, "What happened in the news today?");
+```
+
+### Configuration
+
+```ts title="web-search-config.ts"
+webSearchTool({
+  searchContextSize: "high", // "low" | "medium" | "high"
+  userLocation: {
+    type: "approximate",
+    city: "Seattle",
+    state: "WA",
+    country: "US",
+  },
+});
+```
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `searchContextSize` | `"low" \| "medium" \| "high"` | How much search context to include. Higher values use more tokens but provide richer results. |
+| `userLocation` | `object` | Approximate user location for location-aware results. All fields optional except `type`. |
+
+## Code Interpreter
+
+Let the model write and execute Python code in a sandboxed container.
+
+```ts title="code-interpreter.ts"
+import { Agent, run, codeInterpreterTool } from "stratus-sdk/core";
+
+const agent = new Agent({
+  name: "analyst",
+  model,
+  tools: [codeInterpreterTool()],
+});
+
+const result = await run(agent, "Calculate the first 20 Fibonacci numbers");
+```
+
+### Configuration
+
+```ts title="code-interpreter-config.ts"
+codeInterpreterTool({
+  container: { type: "auto" }, // default
+});
+```
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `container` | `{ type: string }` | Container configuration. Defaults to `{ type: "auto" }`. |
+
+## MCP (Model Context Protocol)
+
+Connect to remote MCP servers for dynamic tool discovery.
+
+```ts title="mcp.ts"
+import { Agent, run, mcpTool } from "stratus-sdk/core";
+
+const agent = new Agent({
+  name: "connected-agent",
+  model,
+  tools: [
+    mcpTool({
+      serverLabel: "my-tools",
+      serverUrl: "https://my-mcp-server.example.com/sse",
+    }),
+  ],
+});
+
+const result = await run(agent, "Use the available tools to help me");
+```
+
+### Configuration
+
+```ts title="mcp-config.ts"
+mcpTool({
+  serverLabel: "my-tools",               // required
+  serverUrl: "https://example.com/sse",   // required
+  requireApproval: "never",               // or "always" or { always: [...], never: [...] }
+  headers: {                              // optional auth headers
+    Authorization: "Bearer my-token",
+  },
+});
+```
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `serverLabel` | `string` | **Required.** Label for the MCP server |
+| `serverUrl` | `string` | **Required.** URL of the MCP server |
+| `requireApproval` | `"always" \| "never" \| object` | Tool approval policy. Object form: `{ always: string[], never: string[] }` |
+| `headers` | `Record<string, string>` | Headers sent with requests to the MCP server |
+
+## Image Generation
+
+Let the model generate images inline.
+
+```ts title="image-gen.ts"
+import { Agent, run, imageGenerationTool } from "stratus-sdk/core";
+
+const agent = new Agent({
+  name: "creative",
+  model,
+  tools: [imageGenerationTool()],
+});
+
+const result = await run(agent, "Create an image of a sunset over mountains");
+```
+
+No configuration options. The API handles image generation server-side.
+
+## Mixing Tool Types
+
+Built-in tools and function tools work together. The agent sees all tools and picks the right ones.
+
+```ts title="mixed-tools.ts"
+import { Agent, run, tool, webSearchTool, codeInterpreterTool } from "stratus-sdk/core";
+import { z } from "zod";
+
+const saveResult = tool({
+  name: "save_result",
+  description: "Save a result to the database",
+  parameters: z.object({ key: z.string(), value: z.string() }),
+  execute: async (ctx, { key, value }) => {
+    await ctx.db.set(key, value);
+    return "Saved";
+  },
+});
+
+const agent = new Agent({
+  name: "research-assistant",
+  model,
+  tools: [
+    webSearchTool(),           // server-side
+    codeInterpreterTool(),     // server-side
+    saveResult,                // local function
+  ],
+});
+```
+
+Function tools execute locally with hooks, tracing, and abort signal support. Built-in tools execute server-side and bypass the local tool loop entirely.
+
+## How It Works
+
+Built-in tools use the `HostedTool` type internally. Each factory function returns a `HostedTool` with a `definition` object that's passed directly to the Azure Responses API.
+
+```ts
+type AgentTool = FunctionTool | HostedTool;
+
+interface HostedTool {
+  type: "hosted";
+  name: string;
+  definition: Record<string, unknown>;
+}
+```
+
+You can use the type guards `isHostedTool()` and `isFunctionTool()` if you need to distinguish between tool types at runtime.
+
+<Callout type="info">
+Built-in tools don't fire `beforeToolCall` or `afterToolCall` hooks since the SDK has no control over server-side execution. They also don't appear in tracing spans. Function tools continue to support all hook and tracing features.
+</Callout>
+
+## Next steps
+
+- [Tools](/tools) -- define local function tools
+- [Azure OpenAI](/azure) -- model configuration
+- [Hooks](/hooks) -- intercept function tool calls
