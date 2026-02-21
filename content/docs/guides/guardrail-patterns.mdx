@@ -3,16 +3,7 @@ title: "Guide: Guardrail Patterns"
 description: Build layered safety with input screening, output validation, and tool permission control
 ---
 
-Production agents need more than a system prompt to stay safe. A single layer of defense is one bad prompt away from failure. This guide walks you through building defense in depth -- multiple independent safety layers that catch what the others miss.
-
-In this guide, you will:
-
-- **Screen input before the model runs** -- block toxic content, injection attempts, and policy violations with `InputGuardrail`
-- **Validate output before the user sees it** -- catch PII leaks, prohibited content, and quality issues with `OutputGuardrail`
-- **Control tool execution at runtime** -- allow, deny, or modify tool calls with `beforeToolCall` hooks
-- **Restrict agent routing** -- block unauthorized handoffs with `beforeHandoff` hooks
-- **Combine all four layers** on a single agent for true defense in depth
-- **Use a model as a guardrail** -- run a lightweight classifier to screen input before the main agent
+Production agents need more than a system prompt to stay safe. A single layer of defense is one bad prompt away from failure. This guide builds defense in depth -- multiple independent safety layers that catch what the others miss.
 
 ## Input screening
 

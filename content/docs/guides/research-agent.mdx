@@ -3,16 +3,7 @@ title: "Guide: Research Agent"
 description: Build an agent that delegates research tasks to specialized subagents
 ---
 
-Build a research orchestrator that breaks complex questions into subtasks and delegates them to specialized subagents. Each subagent runs independently with its own tools, reports back, and the parent synthesizes the findings into a single answer.
-
-In this guide, you will:
-
-- **Define specialized tools** for web search, page fetching, and data analysis
-- **Create focused subagents** that each handle one research domain
-- **Wire subagents to a parent** using `subagent()` with typed input schemas
-- **Add structured output** to get typed, machine-readable reports
-- **Trace execution** to see which subagents ran and how long they took
-- **Cancel gracefully** with abort signals that propagate to every subagent
+Build a research orchestrator that breaks complex questions into subtasks and delegates them to specialized subagents. Each subagent runs independently with its own tools, reports back, and the parent synthesizes the findings.
 
 ## Quick start
 

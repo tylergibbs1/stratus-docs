@@ -3,11 +3,7 @@ title: Usage & Token Tracking
 description: Monitor token consumption across agent runs
 ---
 
-Every agent run tracks token usage. Access usage data from `RunResult.usage` to monitor costs, enforce limits, and debug token consumption.
-
-- **Per-run totals** — Aggregated across all model calls in a run (including tool loops)
-- **Cache tokens** — Track prompt caching when available
-- **Streaming support** — Usage is available in the final `done` event
+Every agent run tracks token usage. Access `RunResult.usage` to monitor costs, enforce limits, and debug consumption. Usage is aggregated across all model calls in a run, including tool loops.
 
 ## Accessing Usage
 

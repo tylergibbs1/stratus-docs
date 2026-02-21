@@ -3,18 +3,7 @@ title: "Guide: Reducing Latency"
 description: Make your agents faster with streaming, model selection, and prompt optimization
 ---
 
-Every millisecond matters in production. A slow agent drives users away, burns tokens, and blocks downstream systems. This guide covers the most effective techniques for reducing real and perceived latency in Stratus agents, from quick wins to architectural changes.
-
-In this guide, you will:
-
-- **Use streaming** to display partial responses as they arrive, eliminating blank-screen waiting
-- **Choose the right model deployment** for each agent based on speed vs. capability tradeoffs
-- **Optimize instructions** to cut prompt tokens and speed up time-to-first-token
-- **Cap output length with maxTokens** for predictable response times
-- **Reduce tool round-trips** by designing tools that return complete data and enabling parallel calls
-- **Skip the final model call** with `stop_on_first_tool` when you only need the tool result
-- **Abort long-running operations** with `AbortSignal.timeout()` to enforce hard deadlines
-- **Measure with tracing** to identify whether bottlenecks are in model calls or tool execution
+A slow agent drives users away, burns tokens, and blocks downstream systems. This guide covers the most effective techniques for reducing real and perceived latency in Stratus agents.
 
 ## Use streaming
 

@@ -5,26 +5,9 @@ description: Deploy Stratus agents in production with containers, sessions, and 
 
 Stratus agents are not stateless request handlers. The run loop maintains conversation history, executes tools, tracks token usage, and manages handoffs across multiple model calls within a single request. This changes how you think about deployment.
 
-You will learn how to:
+## How agent runs differ from REST endpoints
 
-- **Choose a deployment pattern** -- ephemeral, persistent, or hybrid -- based on your workload
-- **Expose agents over HTTP** with streaming SSE endpoints
-- **Containerize** a Stratus agent service with Docker
-- **Prevent infinite loops** with `maxTurns`, abort signals, and timeouts
-- **Monitor production agents** with tracing and usage tracking
-- **Control costs** by tracking tokens and enforcing limits
-- **Harden for production** with guardrails, input validation, and hook-based permission control
-
-## How Stratus agents differ from stateless APIs
-
-A typical REST endpoint receives a request and returns a response. A Stratus agent run is fundamentally different:
-
-1. **Multiple model calls per request.** A single `run()` may call the model several times -- once to decide on a tool, once to process the result, once more to produce the final answer.
-2. **Tool execution between calls.** The run loop calls your tools (database queries, API calls, file reads) and injects the results back into the conversation.
-3. **State accumulates.** Message history, token usage, and the current agent all evolve during a run. After a handoff, a different agent may be handling the conversation.
-4. **Runs take variable time.** A simple question might need one model call. A complex research task with four tool calls might need five. Plan for variable latency and set upper bounds.
-
-This means your deployment needs to handle long-lived requests, streaming responses, and graceful cancellation -- not just fast request/response cycles.
+A single `run()` may call the model several times, execute tools between calls, and accumulate state as the conversation evolves. A simple question needs one model call; a research task with four tool calls needs five. Your deployment needs to handle long-lived requests, streaming responses, and graceful cancellation.
 
 ## Requirements
 

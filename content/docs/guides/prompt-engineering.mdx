@@ -5,28 +5,9 @@ description: Write effective instructions that make agents reliable and focused
 
 Your agent's `instructions` field is the single highest-leverage thing you can tune. It shapes every model call, every tool decision, and every handoff. A clear, well-structured system prompt can turn a mediocre agent into a reliable one without changing any code.
 
-In this guide, you will learn how to:
-
-- **Write clear, direct instructions** that eliminate ambiguity and reduce hallucination
-- **Assign a role** to focus the model's behavior and tone
-- **Use examples** in your instructions to teach the model your preferred output patterns
-- **Build dynamic instructions** with functions that adapt to runtime context
-- **Fetch external data** into instructions with async functions
-- **Reference tools by name** so the model knows when and how to use them
-- **Write triage instructions** that route conversations to the right specialist
-- **Apply common patterns** for one-word answers, JSON focus, refusal handling, and more
-- **Avoid common mistakes** that make agents unpredictable
-
 ## Why instructions matter
 
-Instructions are the system prompt sent to the model on every turn. They define what the agent does, how it responds, and what it refuses. Unlike user messages that change per request, instructions are stable across the entire conversation.
-
-Good instructions reduce:
-
-- **Hallucination** — the model stays within its defined scope
-- **Tool misuse** — the model knows which tool to reach for and when
-- **Inconsistent tone** — every response matches your product's voice
-- **Wasted tokens** — concise instructions mean faster, cheaper responses
+Instructions are the system prompt sent to the model on every turn. They define what the agent does, how it responds, and what it refuses. Good instructions reduce hallucination, tool misuse, inconsistent tone, and wasted tokens.
 
 <Callout type="info">
 Instructions map directly to the `system` message in the Azure Chat Completions API. Everything in your `instructions` string becomes the system prompt for every model call in the run loop.

@@ -3,11 +3,7 @@ title: Custom Model Providers
 description: Implement the Model interface to use any LLM provider
 ---
 
-Stratus is provider-agnostic at its core. The `stratus/core` package defines a `Model` interface that any LLM provider can implement. Azure is the built-in implementation, but you can plug in OpenAI, Anthropic, local models, or any other provider.
-
-- **Two methods** — `getResponse()` for non-streaming, `getStreamedResponse()` for streaming
-- **Standard types** — `ChatMessage[]` input, `ModelResponse` output
-- **Full compatibility** — Custom models work with all SDK features (tools, handoffs, guardrails, sessions, tracing)
+Stratus is provider-agnostic at its core. The `stratus/core` package defines a `Model` interface that any LLM provider can implement. Azure is the built-in implementation, but you can plug in OpenAI, Anthropic, local models, or anything else. Custom models work with all SDK features — tools, handoffs, guardrails, sessions, and tracing.
 
 ## The Model interface
 

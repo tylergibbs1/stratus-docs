@@ -3,17 +3,7 @@ title: "Guide: Real-Time Streaming"
 description: Stream agent responses to users in real-time with progress indicators and cancellation
 ---
 
-Users expect instant feedback. Streaming lets you display tokens as they arrive, show tool call progress, and cancel long-running requests. This guide walks you through production-ready streaming patterns for CLIs, HTTP endpoints, and multi-turn sessions.
-
-You will learn how to:
-
-- **Stream content deltas** to display partial responses in real time
-- **Handle tool call events** to show progress during multi-step agent runs
-- **Build a CLI interface** with live tool call indicators
-- **Create an SSE endpoint** that streams to a frontend
-- **Use sessions** for multi-turn streaming conversations
-- **Cancel streams** mid-response with `AbortSignal`
-- **Access the final result** after draining a stream
+Users expect instant feedback. Streaming lets you display tokens as they arrive, show tool call progress, and cancel long-running requests. This guide covers production-ready streaming patterns for CLIs, SSE endpoints, and multi-turn sessions.
 
 ## Basic streaming
 

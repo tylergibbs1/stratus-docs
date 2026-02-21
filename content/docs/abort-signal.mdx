@@ -3,11 +3,7 @@ title: Abort & Cancellation
 description: Cancel agent runs with AbortSignal
 ---
 
-Pass an `AbortSignal` to cancel a run at any point. The signal propagates to model API calls, tool executions, and session streams.
-
-- **Immediate cancellation** — Pre-aborted signals throw before the first API call
-- **Mid-run cancellation** — Abort during tool execution or between model calls
-- **Signal propagation** — Tools receive the signal via `options.signal` in their execute function
+Pass an `AbortSignal` to cancel a run at any point. The signal propagates to model API calls, tool executions, and session streams. Pre-aborted signals throw immediately without making any API calls.
 
 ## Basic usage
 

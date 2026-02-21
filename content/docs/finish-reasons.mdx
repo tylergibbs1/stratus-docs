@@ -3,7 +3,7 @@ title: Finish Reasons
 description: Understand why a model stopped generating and how the run loop responds
 ---
 
-Every model response includes a `finishReason` that tells you why the model stopped generating. The run loop inspects this value to decide what happens next -- whether to execute tool calls, return a result, or throw an error.
+Every model response includes a `finishReason` — why the model stopped generating. The run loop uses this to decide what happens next: execute tool calls, return a result, or throw an error.
 
 ## Finish reason values
 
@@ -110,7 +110,7 @@ console.log(result.finishReason); // "stop" // [!code highlight]
 
 ## Finish reasons vs errors
 
-Finish reasons and errors are different categories. A finish reason is part of a successful model response. An error means something went wrong and no usable response was produced.
+A finish reason is part of a successful response. An error means no usable response was produced.
 
 | Condition | Type | How it surfaces | Recoverable? |
 | --- | --- | --- | --- |

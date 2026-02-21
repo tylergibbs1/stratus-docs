@@ -3,11 +3,7 @@ title: Context
 description: Share state across agents, tools, and hooks with typed context
 ---
 
-Context lets you pass shared state -- database connections, API clients, user info -- through the entire agent execution. Tools, hooks, and guardrails all receive the same context object.
-
-- **Type-safe** -- Define a context interface and use `Agent<TContext>` for full type checking
-- **Immutable reference** -- The same context object is passed to every tool and hook call
-- **No globals** -- Context is scoped to a single run, not shared across runs
+Context passes shared state -- database connections, API clients, user info -- through the entire agent execution. Tools, hooks, and guardrails all receive the same typed, immutable context object, scoped to a single run.
 
 ## Basic usage
 

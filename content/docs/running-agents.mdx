@@ -3,11 +3,11 @@ title: Running Agents
 description: Execute agents with run(), stream(), or prompt()
 ---
 
-Stratus provides three ways to execute an agent. All three handle the full tool loop, guardrails, hooks, and tracing automatically.
+Three ways to execute an agent. All handle the full tool loop, guardrails, hooks, and tracing automatically.
 
-- **`run()`** -- Execute and return the final result. Best for server-side tasks where you don't need real-time output.
-- **`stream()`** -- Execute and yield events as they arrive. Best for real-time UIs and CLIs.
-- **`prompt()`** -- One-shot convenience function. Creates a session, runs a single turn, and returns the result.
+- **`run()`** -- Returns the final result. Best when you don't need real-time output.
+- **`stream()`** -- Yields events as they arrive. Best for real-time UIs and CLIs.
+- **`prompt()`** -- One-shot convenience. Single turn in, result out.
 
 ## run()
 

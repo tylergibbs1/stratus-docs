@@ -3,18 +3,7 @@ title: "Guide: Prompt Chaining"
 description: Break complex tasks into sequential agent runs for better accuracy and control
 ---
 
-Prompt chaining breaks a complex task into a sequence of focused agent runs, where each step's output feeds into the next. Instead of asking one agent to do everything, you split the work into stages that are easier to prompt, test, and debug independently.
-
-In this guide, you will:
-
-- **Chain sequential runs** -- pass the output of one agent directly into the next
-- **Use structured output between steps** -- get typed data from step 1 and feed it into step 2 with full type safety
-- **Run steps in parallel** -- execute independent steps concurrently with `Promise.all()` and merge the results
-- **Build self-correction chains** -- generate, review, and refine output across three agents
-- **Choose between chaining and subagents** -- understand when you should control the flow versus letting the model decide
-- **Chain with sessions** -- preserve conversation history across a multi-step pipeline
-- **Handle errors at each step** -- retry, skip, or abort depending on where the failure occurs
-- **Trace the full chain** -- wrap everything in `withTrace()` for end-to-end observability
+Prompt chaining breaks a complex task into a sequence of focused agent runs, where each step's output feeds into the next. You split work into stages that are easier to prompt, test, and debug independently.
 
 ## Basic chaining
 

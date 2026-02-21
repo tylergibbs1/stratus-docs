@@ -3,17 +3,7 @@ title: "Guide: Agentic Tool Use"
 description: Build agents that autonomously call tools, handle results, and loop until done
 ---
 
-Agentic tool use is the pattern where a model decides which tools to call, interprets the results, and keeps looping until it has enough information to answer. Instead of you writing `if/else` dispatch logic, the model drives the entire flow. You define the tools, call `run()`, and Stratus handles everything in between.
-
-In this guide you will learn:
-
-- **How the tool loop works** — the cycle of model call, tool execution, and result injection that powers autonomous agents
-- **Parallel tool calls** — how the model can call multiple tools in a single turn
-- **Controlling tool behavior** — `toolChoice` and `toolUseBehavior` for fine-grained control over when and how tools run
-- **Error recovery** — what happens when a tool throws, and how the model adapts
-- **Streaming with tools** — real-time events during multi-turn tool execution
-- **Context passing** — injecting database clients, API keys, and user info into tools
-- **Cancellation** — propagating `AbortSignal` to long-running tool calls
+Agentic tool use is the pattern where the model decides which tools to call, interprets the results, and loops until it has enough information to answer. You define the tools, call `run()`, and Stratus handles the dispatch, validation, parallel execution, and error recovery.
 
 ## How the tool loop works
 

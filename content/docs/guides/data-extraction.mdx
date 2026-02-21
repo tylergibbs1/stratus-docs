@@ -3,16 +3,7 @@ title: "Guide: Data Extraction Pipeline"
 description: Extract structured data from unstructured text with validation and guardrails
 ---
 
-Turn unstructured text into typed, validated data. This guide walks you through building an extraction pipeline that parses support tickets, emails, and documents into Zod-validated objects with guardrails that catch bad output before it reaches your system.
-
-In this guide, you will:
-
-- **Define a Zod schema** that describes the exact shape of your extracted data
-- **Create an extraction agent** that returns type-safe structured output
-- **Add output guardrails** that validate quality and block sensitive data leaks
-- **Process documents in batch** using `prompt()` for stateless extraction
-- **Enrich extractions with tools** that pull in external data during extraction
-- **Monitor performance with tracing** to track model calls, tool usage, and latency
+Turn unstructured text into typed, validated data. This guide builds an extraction pipeline that parses support tickets, emails, and documents into Zod-validated objects with guardrails that catch bad output before it reaches your system.
 
 ## Quick start
 

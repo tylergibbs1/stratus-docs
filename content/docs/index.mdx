@@ -7,20 +7,18 @@ Stratus is a TypeScript SDK for building AI agents powered by Azure OpenAI. It p
 
 ## Why this exists
 
-Azure OpenAI's developer experience got a lot better in August 2025 when Microsoft shipped the v1 API. You can now use the standard `OpenAI()` client from the `openai` npm package, point it at your Azure endpoint, and things mostly just work.
+Azure OpenAI's v1 API lets you use the standard `OpenAI()` client, point it at your Azure endpoint, and things mostly just work. But "mostly" isn't good enough for production.
 
-**So why build another SDK?**
+The OpenAI SDK gives you `chat.completions.create()`. Everything else — the tool loop, agent abstractions, streaming, error handling, multi-agent orchestration — is on you:
 
-Because "mostly just work" isn't good enough for production. The v1 API solved the worst pain points — no more `api-version` query strings, no more `AzureOpenAI()` client, standard method names. But there's a layer of functionality that the vanilla OpenAI SDK doesn't touch, and the gaps that remain are exactly the ones that burn you at scale:
+- **Tool calling requires a manual loop.** Stratus handles the entire [tool loop](/docs/guides/agentic-tool-use) — one `run()` call with parallel execution, validation, and error recovery.
+- **No agent abstraction.** Stratus gives you [composable agents](/docs/agents) with instructions, tools, guardrails, and handoffs in a single config object.
+- **Basic streaming.** Stratus provides typed [stream events](/docs/streaming) — `content_delta`, `tool_call_start`, `tool_call_done` — with accumulation and a final `RunResult`.
+- **Opaque content filter errors.** Stratus throws a typed [`ContentFilterError`](/docs/errors) instead of Azure's buried `inner_error.content_filter_results`.
+- **No multi-agent orchestration.** [Handoffs](/docs/handoffs), [subagents](/docs/subagents), [guardrails](/docs/guardrails), and [hooks](/docs/hooks) are first-class.
+- **Responses API support.** Both [Chat Completions and Responses API](/docs/azure) through the same `Model` interface — swap with one line.
 
-- **Tool calling requires a manual loop.** Zod schema to tool definition to model call to tool execution to response... this should be a single `run()` call with full type inference, not 80 lines of boilerplate. Stratus handles the entire [tool loop automatically](/docs/guides/agentic-tool-use) — parallel calls, multi-round execution, argument validation, error recovery.
-- **There's no agent abstraction.** The OpenAI SDK gives you `chat.completions.create()`. Building agents with instructions, tools, guardrails, handoffs, and session management on top of that is entirely on you. Stratus provides [composable agents](/docs/agents) with a clean config object.
-- **Streaming helpers are basic.** The OpenAI SDK gives you async iteration over raw chunks. Stratus gives you typed [stream events](/docs/streaming) — `content_delta`, `tool_call_start`, `tool_call_done` — with content accumulation and a final `RunResult`.
-- **Content filter errors are opaque.** Azure wraps policy violations in `inner_error.content_filter_results` but the OpenAI client throws a generic error. Stratus throws a typed [`ContentFilterError`](/docs/errors) you can catch and handle.
-- **Multi-agent orchestration doesn't exist.** [Handoffs](/docs/handoffs) between specialized agents, [subagent delegation](/docs/subagents), [guardrails](/docs/guardrails), [hooks](/docs/hooks) for permission control — none of this exists in the vanilla SDK. Stratus makes these first-class.
-- **The Responses API is the future, but adoption is low.** Microsoft recommends the [Responses API](https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/responses) for new development. Stratus supports both the [Chat Completions and Responses API](/docs/azure) through the same `Model` interface — swap with one line.
-
-The goal: feel like Anthropic's TypeScript SDK — clean, typed, zero-config for the common case — while properly wrapping Azure's unique capabilities.
+The goal: clean, typed, zero-config for the common case — while properly wrapping Azure's unique capabilities.
 
 ## Features
 
