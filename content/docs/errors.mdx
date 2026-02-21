@@ -10,6 +10,7 @@ Stratus defines specific error classes for different failure modes. All errors e
 ```
 StratusError
 ├── MaxTurnsExceededError
+├── MaxBudgetExceededError
 ├── RunAbortedError
 ├── ModelError
 │   └── ContentFilterError
@@ -49,6 +50,34 @@ try {
   }
 }
 ```
+
+## MaxBudgetExceededError
+
+Thrown when the estimated cost of a run exceeds `maxBudgetUsd`. Requires a `costEstimator` in options. The `onStop` hook fires before this error is thrown.
+
+```ts
+import { MaxBudgetExceededError, createCostEstimator } from "stratus/core";
+
+const estimator = createCostEstimator({
+  inputTokenCostPer1k: 0.005,
+  outputTokenCostPer1k: 0.015,
+});
+
+try {
+  await run(agent, input, {
+    costEstimator: estimator,
+    maxBudgetUsd: 0.50,
+  });
+} catch (error) {
+  if (error instanceof MaxBudgetExceededError) {
+    console.error(`Budget exceeded: spent $${error.spentUsd.toFixed(4)} of $${error.budgetUsd.toFixed(4)}`);
+  }
+}
+```
+
+Properties:
+- `budgetUsd: number` - The budget limit that was set
+- `spentUsd: number` - The actual amount spent when the limit was crossed
 
 ## RunAbortedError
 

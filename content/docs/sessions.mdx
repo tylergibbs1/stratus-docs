@@ -259,3 +259,5 @@ console.log(result.output); // "4"
 | `toolUseBehavior` | `ToolUseBehavior` | Post-tool-call behavior |
 | `context` | `TContext` | Shared context object |
 | `maxTurns` | `number` | Max model calls per `stream()` (default: 10) |
+| `costEstimator` | `CostEstimator` | Function that converts `UsageInfo` to a dollar cost. Enables `totalCostUsd` on results |
+| `maxBudgetUsd` | `number` | Maximum dollar budget per `stream()`. Throws `MaxBudgetExceededError` when exceeded |

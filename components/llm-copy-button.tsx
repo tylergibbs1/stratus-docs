@@ -1,9 +1,16 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 
 export function LLMCopyButton({ markdownUrl }: { markdownUrl: string }) {
 	const [copied, setCopied] = useState(false);
+	const timeoutRef = useRef<ReturnType<typeof setTimeout>>(null);
+
+	useEffect(() => {
+		return () => {
+			if (timeoutRef.current) clearTimeout(timeoutRef.current);
+		};
+	}, []);
 
 	const handleCopy = useCallback(async () => {
 		try {
@@ -11,7 +18,8 @@ export function LLMCopyButton({ markdownUrl }: { markdownUrl: string }) {
 			const text = await res.text();
 			await navigator.clipboard.writeText(text);
 			setCopied(true);
-			setTimeout(() => setCopied(false), 2000);
+			if (timeoutRef.current) clearTimeout(timeoutRef.current);
+			timeoutRef.current = setTimeout(() => setCopied(false), 2000);
 		} catch {
 			// ignore
 		}

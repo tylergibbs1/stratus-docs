@@ -423,6 +423,36 @@ const agent = new Agent({
 });
 ```
 
+## Reasoning effort
+
+For reasoning models (o1, o3, etc.), `reasoningEffort` in `modelSettings` controls how much internal thinking the model does. This is a powerful tuning knob that can replace verbose "think step by step" instructions.
+
+```ts title="reasoning-effort.ts"
+import { Agent } from "stratus/core";
+
+// Instead of "Think through the problem step by step" in instructions,
+// use reasoningEffort to control depth directly
+const agent = new Agent({
+  name: "analyst",
+  model, // reasoning model deployment
+  instructions: "Analyze the data and provide your conclusion.",
+  modelSettings: {
+    reasoningEffort: "high", // [!code highlight]
+    maxCompletionTokens: 8192,
+  },
+});
+```
+
+| Effort | Good for |
+| --- | --- |
+| `"low"` | Simple classification, formatting |
+| `"medium"` | General analysis, Q&A |
+| `"high"` | Complex reasoning, multi-step math |
+
+<Callout type="info">
+`reasoningEffort` is only meaningful for reasoning models. Standard chat models ignore it.
+</Callout>
+
 ## What to avoid
 
 ### Too vague
@@ -483,16 +513,16 @@ Instructions are suggestions to the model, not guarantees. For anything that mus
 ## Next steps
 
 <Cards>
-  <Card title="Agents" href="/docs/agents">
+  <Card title="Agents" href="/agents">
     Full reference for Agent configuration and dynamic instructions
   </Card>
-  <Card title="Tools" href="/docs/tools">
+  <Card title="Tools" href="/tools">
     Define tools that your instructions can reference
   </Card>
-  <Card title="Handoffs" href="/docs/handoffs">
+  <Card title="Handoffs" href="/handoffs">
     Build multi-agent routing with triage instructions
   </Card>
-  <Card title="Hooks" href="/docs/hooks">
+  <Card title="Hooks" href="/hooks">
     Enforce hard constraints that instructions alone cannot guarantee
   </Card>
 </Cards>

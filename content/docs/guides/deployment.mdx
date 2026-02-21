@@ -530,72 +530,78 @@ logUsage(requestId, result.usage); // [!code highlight]
 
 ## Cost management
 
-### Token tracking per request
+### Built-in cost tracking
 
-Build a cost estimator from usage data:
+Use `createCostEstimator()` and pass it to `run()` or `createSession()` for automatic per-run cost tracking:
 
 ```ts title="cost-tracking.ts"
-import type { UsageInfo } from "stratus/core";
+import { Agent, run, createCostEstimator } from "stratus/core";
 
-interface TokenPricing {
-  promptPer1k: number;
-  completionPer1k: number;
-  cachedPromptPer1k?: number;
-}
-
-function estimateCost(usage: UsageInfo, pricing: TokenPricing): number {
-  const promptCost = (usage.promptTokens / 1000) * pricing.promptPer1k;
-  const completionCost = (usage.completionTokens / 1000) * pricing.completionPer1k;
-
-  let cacheDiscount = 0;
-  if (usage.cacheReadTokens && pricing.cachedPromptPer1k !== undefined) {
-    const savings = pricing.promptPer1k - pricing.cachedPromptPer1k;
-    cacheDiscount = (usage.cacheReadTokens / 1000) * savings;
-  }
-
-  return promptCost + completionCost - cacheDiscount;
-}
-
-// Track per request
-const result = await run(agent, input);
-const cost = estimateCost(result.usage, {
-  promptPer1k: 0.005,
-  completionPer1k: 0.015,
-  cachedPromptPer1k: 0.0025,
+const estimator = createCostEstimator({ // [!code highlight]
+  inputTokenCostPer1k: 0.005,
+  outputTokenCostPer1k: 0.015,
+  cachedInputTokenCostPer1k: 0.0025,
 });
-console.log(`Request cost: $${cost.toFixed(4)}`); // [!code highlight]
+
+const result = await run(agent, input, {
+  costEstimator: estimator, // [!code highlight]
+});
+
+console.log(`Cost: $${result.totalCostUsd.toFixed(4)}`); // [!code highlight]
+console.log(`Turns: ${result.numTurns}`);
 ```
 
-### Enforcing usage limits
+### Budget enforcement
 
-Reject requests that would exceed a user's token budget. Track cumulative usage per user and check before starting a new run:
+Set `maxBudgetUsd` to automatically stop runs that exceed a dollar threshold. The `onStop` hook fires with `reason: "max_budget"` before `MaxBudgetExceededError` is thrown.
 
-```ts title="usage-limits.ts"
-import { Agent, run } from "stratus/core";
+```ts title="budget-limits.ts"
+import { Agent, run, createCostEstimator, MaxBudgetExceededError } from "stratus/core";
 
-interface UserBudget {
-  totalTokensUsed: number;
-  maxTokens: number;
-}
+const estimator = createCostEstimator({
+  inputTokenCostPer1k: 0.005,
+  outputTokenCostPer1k: 0.015,
+});
 
-async function handleWithBudget(
-  agent: Agent,
-  input: string,
-  budget: UserBudget,
-) {
-  if (budget.totalTokensUsed >= budget.maxTokens) { // [!code highlight]
-    throw new Error("Token budget exceeded. Please upgrade your plan.");
+const agent = new Agent({
+  name: "researcher",
+  model,
+  tools: [searchWeb, readPage, summarize],
+  hooks: {
+    onStop: async ({ reason }) => { // [!code highlight]
+      if (reason === "max_budget") {
+        await logToAnalytics("budget_exceeded");
+      }
+    },
+  },
+});
+
+try {
+  const result = await run(agent, "Research quantum computing", {
+    costEstimator: estimator,
+    maxBudgetUsd: 0.50, // [!code highlight]
+    maxTurns: 15,
+  });
+  console.log(result.output);
+} catch (error) {
+  if (error instanceof MaxBudgetExceededError) {
+    console.error(`Budget exceeded: spent $${error.spentUsd.toFixed(4)} of $${error.budgetUsd.toFixed(4)}`);
   }
-
-  const result = await run(agent, input, { maxTurns: 5 });
-  budget.totalTokensUsed += result.usage.totalTokens; // [!code highlight]
-
-  return result;
 }
+```
+
+Sessions support the same options:
+
+```ts title="session-budget.ts"
+const session = createSession({
+  model,
+  costEstimator: estimator,
+  maxBudgetUsd: 1.00, // [!code highlight]
+});
 ```
 
 <Callout type="info">
-Token budgets are approximate. A single run may use more tokens than expected if the model makes several tool calls. Set budgets with headroom and check after each run, not mid-run.
+The budget is checked after each model call. A single model call may push spending over the limit. Set budgets with headroom.
 </Callout>
 
 ## Security
@@ -737,16 +743,16 @@ const agent = new Agent({
 ## Next steps
 
 <Cards>
-  <Card title="Sessions" href="/docs/sessions">
+  <Card title="Sessions" href="/sessions">
     Multi-turn conversations with save, resume, and fork
   </Card>
-  <Card title="Tracing" href="/docs/tracing">
+  <Card title="Tracing" href="/tracing">
     Span-based observability for model calls, tools, and handoffs
   </Card>
-  <Card title="Hooks" href="/docs/hooks">
+  <Card title="Hooks" href="/hooks">
     Permission control with allow, deny, and modify decisions
   </Card>
-  <Card title="Guardrails" href="/docs/guardrails">
+  <Card title="Guardrails" href="/guardrails">
     Input and output validation with tripwire support
   </Card>
 </Cards>

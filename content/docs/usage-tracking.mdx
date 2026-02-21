@@ -31,9 +31,10 @@ console.log(result.usage.cacheCreationTokens); // Tokens written to cache (if av
 | `totalTokens` | `number` | Sum of `promptTokens` and `completionTokens` |
 | `cacheReadTokens` | `number?` | Tokens served from Azure's prompt cache |
 | `cacheCreationTokens` | `number?` | Tokens written to the prompt cache |
+| `reasoningTokens` | `number?` | Tokens used for internal reasoning (reasoning models only) |
 
 <Callout type="info">
-Cache token fields are only present when Azure returns prompt caching details. When unavailable, they are `undefined` rather than `0`.
+Optional fields (`cacheReadTokens`, `cacheCreationTokens`, `reasoningTokens`) are `undefined` when the model doesn't report them, not `0`.
 </Callout>
 
 ## Usage Across Tool Loops
@@ -98,42 +99,55 @@ console.log("Total:", finalResult.usage.totalTokens); // [!code highlight]
 
 ## Tracking Costs
 
-Build a simple cost calculator using the usage fields. Token prices depend on your Azure deployment and model:
+### Built-in cost estimator
+
+Use `createCostEstimator()` to build a cost function from your model's pricing. Pass it as `costEstimator` in run options to get automatic cost tracking on every result.
 
 ```ts title="costs.ts"
-import type { UsageInfo } from "stratus/core";
+import { Agent, run, createCostEstimator } from "stratus/core";
 
-interface TokenPricing {
-  promptPer1k: number;
-  completionPer1k: number;
-  cachedPromptPer1k?: number;
-}
+const estimator = createCostEstimator({ // [!code highlight]
+  inputTokenCostPer1k: 0.005,
+  outputTokenCostPer1k: 0.015,
+  cachedInputTokenCostPer1k: 0.0025, // optional: discounted rate for cached tokens
+});
 
-function estimateCost(usage: UsageInfo, pricing: TokenPricing): number {
-  const promptCost = (usage.promptTokens / 1000) * pricing.promptPer1k;
-  const completionCost = (usage.completionTokens / 1000) * pricing.completionPer1k;
+const agent = new Agent({ name: "assistant", model });
+const result = await run(agent, "Summarize this document", {
+  costEstimator: estimator, // [!code highlight]
+});
 
-  // Subtract cached tokens if a lower cached rate applies
-  let cacheDiscount = 0;
-  if (usage.cacheReadTokens && pricing.cachedPromptPer1k !== undefined) {
-    const savings = pricing.promptPer1k - pricing.cachedPromptPer1k;
-    cacheDiscount = (usage.cacheReadTokens / 1000) * savings;
-  }
-
-  return promptCost + completionCost - cacheDiscount;
-}
-
-// Example: gpt-5.2 pricing (hypothetical)
-const pricing: TokenPricing = {
-  promptPer1k: 0.005,
-  completionPer1k: 0.015,
-  cachedPromptPer1k: 0.0025,
-};
-
-const result = await run(agent, "Summarize this document");
-const cost = estimateCost(result.usage, pricing);
-console.log(`Estimated cost: $${cost.toFixed(4)}`);
+console.log(`Cost: $${result.totalCostUsd.toFixed(4)}`); // [!code highlight]
+console.log(`Turns: ${result.numTurns}`); // [!code highlight]
 ```
+
+`totalCostUsd` accumulates across all model calls in the run. Without a `costEstimator`, it's always `0`.
+
+### Budget limits
+
+Set `maxBudgetUsd` to automatically stop runs that exceed a dollar threshold. Requires `costEstimator`.
+
+```ts title="budget.ts"
+import { run, createCostEstimator, MaxBudgetExceededError } from "stratus/core";
+
+const estimator = createCostEstimator({
+  inputTokenCostPer1k: 0.005,
+  outputTokenCostPer1k: 0.015,
+});
+
+try {
+  const result = await run(agent, "Research this topic thoroughly", {
+    costEstimator: estimator,
+    maxBudgetUsd: 0.50, // [!code highlight]
+  });
+} catch (error) {
+  if (error instanceof MaxBudgetExceededError) {
+    console.error(`Spent $${error.spentUsd.toFixed(4)} — budget was $${error.budgetUsd.toFixed(4)}`);
+  }
+}
+```
+
+The budget is checked after each model call. The `onStop` hook fires with `reason: "max_budget"` before the error is thrown.
 
 ## Usage with Sessions
 

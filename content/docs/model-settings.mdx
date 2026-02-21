@@ -43,6 +43,59 @@ const creativeAgent = agent.clone({
 | `toolChoice` | `ToolChoice` | `"auto"` | Controls which tools the model can call. See [Tool choice](#tool-choice). |
 | `parallelToolCalls` | `boolean` | `true` | Whether the model can call multiple tools in a single turn. |
 | `seed` | `number` | `undefined` | Seed for deterministic sampling. Repeated requests with the same seed and parameters should return the same result. |
+| `reasoningEffort` | `ReasoningEffort` | `undefined` | Controls how much reasoning effort the model spends. See [Reasoning models](#reasoning-models). |
+| `maxCompletionTokens` | `number` | `undefined` | Max tokens for the model's completion, including reasoning tokens. Use instead of `maxTokens` for reasoning models. |
+| `promptCacheKey` | `string` | `undefined` | Influences prompt cache routing. Requests with the same key and prefix are more likely to hit cache. See [Prompt caching](#prompt-caching). |
+
+## Reasoning models
+
+For reasoning models (o1, o3, etc.), use `reasoningEffort` and `maxCompletionTokens` instead of `temperature` and `maxTokens`.
+
+`reasoningEffort` controls how much internal reasoning the model does before responding. Higher effort produces more thorough answers but uses more tokens and takes longer.
+
+```ts title="reasoning-settings.ts"
+import { Agent } from "stratus/core";
+
+const agent = new Agent({
+  name: "analyst",
+  model,
+  modelSettings: {
+    reasoningEffort: "high", // [!code highlight]
+    maxCompletionTokens: 16384, // [!code highlight]
+  },
+});
+```
+
+Valid values for `reasoningEffort`:
+
+| Value | Description |
+| --- | --- |
+| `"none"` | No reasoning |
+| `"minimal"` | Minimal reasoning |
+| `"low"` | Low effort |
+| `"medium"` | Medium effort (default for reasoning models) |
+| `"high"` | High effort |
+| `"xhigh"` | Maximum effort |
+
+<Callout type="info">
+`maxCompletionTokens` includes both reasoning tokens and output tokens. If the model uses 1000 tokens for reasoning and 500 for the response, that's 1500 total against the limit. Reasoning tokens are tracked in `UsageInfo.reasoningTokens`.
+</Callout>
+
+## Prompt caching
+
+Azure automatically caches prompt prefixes for requests over 1,024 tokens. Use `promptCacheKey` to improve cache hit rates when many requests share long common prefixes.
+
+```ts title="cache-key.ts"
+const agent = new Agent({
+  name: "assistant",
+  model,
+  modelSettings: {
+    promptCacheKey: "support-agent-v2", // [!code highlight]
+  },
+});
+```
+
+Cache hits appear as `cacheReadTokens` in `UsageInfo` and are billed at a discount. No opt-in is needed for basic caching — `promptCacheKey` is only for improving hit rates across requests with shared prefixes.
 
 ## Tool choice
 

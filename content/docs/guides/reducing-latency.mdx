@@ -249,6 +249,39 @@ This eliminates the second model call entirely, cutting total latency roughly in
 When `stop_on_first_tool` is active, `result.output` contains the raw tool return value. The model does not format or summarize the result. This is ideal when the caller is code (not a human) and can parse the tool output directly.
 </Callout>
 
+## Leverage prompt caching
+
+Azure automatically caches prompt prefixes for requests over 1,024 tokens. Cached tokens process faster and cost less. Structure your prompts so that static content (system prompt, tool definitions, conversation history) comes first, with the variable part last.
+
+When many requests share long common prefixes, use `promptCacheKey` to improve cache hit rates:
+
+```ts title="prompt-cache.ts"
+import { Agent } from "stratus/core";
+
+const agent = new Agent({
+  name: "support",
+  model,
+  instructions: longSystemPrompt, // 2000+ tokens of static instructions
+  tools: [searchKnowledgeBase, createTicket, lookupAccount],
+  modelSettings: {
+    promptCacheKey: "support-agent-v1", // [!code highlight]
+  },
+});
+```
+
+Cache hits appear as `cacheReadTokens` in `UsageInfo`. Monitor them to verify caching is working:
+
+```ts
+const result = await run(agent, userMessage);
+const cached = result.usage.cacheReadTokens ?? 0;
+const total = result.usage.promptTokens;
+console.log(`Cache hit: ${cached}/${total} tokens (${((cached / total) * 100).toFixed(0)}%)`);
+```
+
+<Callout type="info">
+Prompt caching requires at least 1,024 identical tokens at the start of the prompt. After that, cache hits occur for every 128 additional identical tokens. Caches are cleared within 24 hours.
+</Callout>
+
 ## Abort long-running operations
 
 Use `AbortSignal.timeout()` to enforce a hard deadline on agent runs. If the model or a tool takes too long, the run throws `RunAbortedError` instead of hanging indefinitely.
@@ -350,21 +383,22 @@ Tracing is opt-in. When `withTrace()` is not used, all tracing code paths are sk
 | `parallelToolCalls` | Concurrent tool execution instead of sequential | Model must support parallel calls (default in gpt-5.2) |
 | `stop_on_first_tool` | Eliminates the second model call entirely | No model-formatted summary - raw tool output only |
 | `AbortSignal.timeout()` | Hard deadline prevents runaway operations | Incomplete results on timeout - need a fallback |
+| `promptCacheKey` | Reduced latency and cost for repeated long prefixes | Requires 1,024+ token prefix; caches expire within 24h |
 | `withTrace()` | Data-driven optimization instead of guessing | Small overhead when active (zero when inactive) |
 
 ## Next steps
 
 <Cards>
-  <Card title="Streaming" href="/docs/streaming">
+  <Card title="Streaming" href="/streaming">
     Full reference for stream events and abort signals
   </Card>
-  <Card title="Model Settings" href="/docs/model-settings">
+  <Card title="Model Settings" href="/model-settings">
     Configure maxTokens, toolChoice, parallelToolCalls, and more
   </Card>
-  <Card title="Tracing" href="/docs/tracing">
+  <Card title="Tracing" href="/tracing">
     Span-based observability for model calls and tool execution
   </Card>
-  <Card title="Abort & Cancellation" href="/docs/abort-signal">
+  <Card title="Abort & Cancellation" href="/abort-signal">
     Timeout patterns and signal propagation
   </Card>
 </Cards>

@@ -127,12 +127,29 @@ interface UsageInfo {
   totalTokens: number;
   cacheReadTokens?: number; // [!code highlight]
   cacheCreationTokens?: number; // [!code highlight]
+  reasoningTokens?: number; // [!code highlight]
 }
 ```
 
 <Callout>
-Cache token fields are populated when the Azure API returns `prompt_tokens_details.cached_tokens`. They're `undefined` when caching is not active.
+Cache token fields are populated when the Azure API returns prompt caching details. `reasoningTokens` is populated for reasoning models (o1, o3, etc.) from `completion_tokens_details.reasoning_tokens` (Chat Completions) or `output_tokens_details.reasoning_tokens` (Responses API). All optional fields are `undefined` when not active.
 </Callout>
+
+### Prompt Caching
+
+Both models support Azure's automatic prompt caching. Cache hits appear as `cacheReadTokens` in `UsageInfo` and are billed at a discount. Use `promptCacheKey` in `ModelSettings` to improve hit rates:
+
+```ts
+const agent = new Agent({
+  name: "assistant",
+  model,
+  modelSettings: {
+    promptCacheKey: "my-app-v1", // [!code highlight]
+  },
+});
+```
+
+Both `AzureChatCompletionsModel` and `AzureResponsesModel` parse cached token counts from their respective response formats.
 
 ## Authentication
 

@@ -11,9 +11,14 @@ Hooks let you run custom code at key points in the agent lifecycle. Use them for
 | --- | --- |
 | `beforeRun` | Before the first model call |
 | `afterRun` | After the final result is produced |
-| `beforeToolCall` | Before a tool's `execute` function runs |
-| `afterToolCall` | After a tool's `execute` function returns |
+| `beforeToolCall` | Before a tool's `execute` function runs. Supports [matcher arrays](#hook-matchers) |
+| `afterToolCall` | After a tool's `execute` function returns. Supports [matcher arrays](#hook-matchers) |
 | `beforeHandoff` | Before switching to a handoff agent |
+| `onStop` | Before `MaxTurnsExceededError` or `MaxBudgetExceededError` is thrown |
+| `onSubagentStart` | Before a subagent begins execution |
+| `onSubagentStop` | After a subagent finishes execution |
+| `onSessionStart` | On the session's first `stream()` call |
+| `onSessionEnd` | After each session `stream()` completes |
 
 ## Usage
 
@@ -137,6 +142,116 @@ hooks: {
 }
 ```
 
+## Hook Matchers
+
+Instead of filtering by tool name inside your hook function, you can use **matcher arrays** on `beforeToolCall` and `afterToolCall`. Each entry specifies which tools it applies to using strings or regex patterns.
+
+```ts title="matchers.ts"
+const agent = new Agent({
+  name: "assistant",
+  model,
+  tools: [readFile, writeFile, deleteFile, getWeather],
+  hooks: {
+    beforeToolCall: [ // [!code highlight]
+      {
+        match: /.*_file$/, // Regex: matches read_file, write_file, delete_file // [!code highlight]
+        hook: ({ toolCall, context }) => {
+          console.log(`File operation: ${toolCall.function.name}`);
+        },
+      },
+      {
+        match: "delete_file", // String: exact match // [!code highlight]
+        hook: ({ context }) => {
+          if (!context.isAdmin) {
+            return { decision: "deny", reason: "Admin access required" };
+          }
+        },
+      },
+    ],
+    afterToolCall: [ // [!code highlight]
+      {
+        match: ["read_file", "write_file"], // Array: matches any // [!code highlight]
+        hook: ({ toolCall, result }) => {
+          console.log(`${toolCall.function.name} returned ${result.length} chars`);
+        },
+      },
+    ],
+  },
+});
+```
+
+### Matcher types
+
+| Form | Example | Matches |
+| --- | --- | --- |
+| `string` | `"delete_file"` | Exact tool name match |
+| `RegExp` | `/^dangerous_/` | Tools whose name matches the pattern |
+| `Array` | `["read_file", /^write_/]` | Tools matching any entry in the array |
+
+### Execution semantics
+
+- Matchers are checked in array order
+- For `beforeToolCall`, the first `"deny"` or `"modify"` decision short-circuits — later matchers are skipped
+- For `afterToolCall`, all matching entries run (no short-circuit)
+- The function form (single callback) still works for backward compatibility
+
+## Lifecycle Hooks
+
+Beyond the core hooks, Stratus provides lifecycle hooks for stops, subagent execution, and session boundaries.
+
+### onStop
+
+Fires before `MaxTurnsExceededError` or `MaxBudgetExceededError` is thrown. Use it for cleanup or logging.
+
+```ts title="on-stop.ts"
+hooks: {
+  onStop: async ({ agent, context, reason }) => { // [!code highlight]
+    // reason: "max_turns" | "max_budget"
+    await logToAnalytics("agent_stopped", {
+      agent: agent.name,
+      reason,
+    });
+  },
+}
+```
+
+### onSubagentStart / onSubagentStop
+
+Fire before and after a [subagent](/subagents) executes as a tool call.
+
+```ts title="subagent-hooks.ts"
+hooks: {
+  onSubagentStart: async ({ agent, subagent, context }) => {
+    console.log(`${agent.name} is delegating to ${subagent.agent.name}`);
+  },
+  onSubagentStop: async ({ agent, subagent, result, context }) => {
+    console.log(`${subagent.agent.name} returned: ${result.slice(0, 100)}`);
+  },
+}
+```
+
+### onSessionStart / onSessionEnd
+
+Fire on the session's first `stream()` call and after each `stream()` completes (in the `finally` block). Set these on the session's `hooks` config.
+
+```ts title="session-lifecycle.ts"
+const session = createSession({
+  model,
+  hooks: {
+    onSessionStart: async ({ context }) => { // [!code highlight]
+      console.log("Session started");
+    },
+    onSessionEnd: async ({ context }) => { // [!code highlight]
+      console.log("Stream ended");
+    },
+  },
+});
+```
+
+<Callout type="info">
+`onSessionStart` fires once — on the first `stream()` call. `onSessionEnd` fires after every `stream()` call, including when errors occur.
+</Callout>
+
 ## Hook Signatures
 
 ```ts title="types.ts"
@@ -153,24 +268,46 @@ interface AgentHooks<TContext> {
     context: TContext;
   }) => void | Promise<void>;
 
-  beforeToolCall?: (params: {
-    agent: Agent<TContext, any>;
-    toolCall: ToolCall;
-    context: TContext;
-  }) => void | ToolCallDecision | Promise<void | ToolCallDecision>;
+  beforeToolCall?: BeforeToolCallHook<TContext>;
+  // Function form: (params) => void | ToolCallDecision
+  // Array form:    MatchedToolCallHook<TContext>[]
 
-  afterToolCall?: (params: {
-    agent: Agent<TContext, any>;
-    toolCall: ToolCall;
-    result: string;
-    context: TContext;
-  }) => void | Promise<void>;
+  afterToolCall?: AfterToolCallHook<TContext>;
+  // Function form: (params) => void
+  // Array form:    MatchedAfterToolCallHook<TContext>[]
 
   beforeHandoff?: (params: {
     fromAgent: Agent<TContext, any>;
     toAgent: Agent<TContext, any>;
     context: TContext;
   }) => void | HandoffDecision | Promise<void | HandoffDecision>;
+
+  onStop?: (params: {
+    agent: Agent<TContext, any>;
+    context: TContext;
+    reason: "max_turns" | "max_budget";
+  }) => void | Promise<void>;
+
+  onSubagentStart?: (params: {
+    agent: Agent<TContext, any>;
+    subagent: SubAgent;
+    context: TContext;
+  }) => void | Promise<void>;
+
+  onSubagentStop?: (params: {
+    agent: Agent<TContext, any>;
+    subagent: SubAgent;
+    result: string;
+    context: TContext;
+  }) => void | Promise<void>;
+
+  onSessionStart?: (params: {
+    context: TContext;
+  }) => void | Promise<void>;
+
+  onSessionEnd?: (params: {
+    context: TContext;
+  }) => void | Promise<void>;
 }
 ```
 

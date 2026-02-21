@@ -23,35 +23,38 @@ The goal: clean, typed, zero-config for the common case - while properly wrappin
 ## Features
 
 <Cards>
-  <Card title="Agents" href="/docs/agents">
+  <Card title="Agents" href="/agents">
     Define agents with instructions, tools, and model settings
   </Card>
-  <Card title="Sessions" href="/docs/sessions">
+  <Card title="Sessions" href="/sessions">
     Multi-turn conversations with save/resume/fork
   </Card>
-  <Card title="Tools" href="/docs/tools">
+  <Card title="Tools" href="/tools">
     Type-safe tool definitions with Zod schema validation
   </Card>
-  <Card title="Subagents" href="/docs/subagents">
+  <Card title="Subagents" href="/subagents">
     Delegate work to child agents as tool calls
   </Card>
-  <Card title="Streaming" href="/docs/streaming">
+  <Card title="Streaming" href="/streaming">
     Real-time streaming with abort signal cancellation
   </Card>
-  <Card title="Structured Output" href="/docs/structured-output">
+  <Card title="Structured Output" href="/structured-output">
     Parse model output into typed objects via Zod
   </Card>
-  <Card title="Handoffs" href="/docs/handoffs">
+  <Card title="Handoffs" href="/handoffs">
     Route conversations between specialized agents
   </Card>
-  <Card title="Hooks" href="/docs/hooks">
+  <Card title="Hooks" href="/hooks">
     Lifecycle callbacks with permission control (allow/deny/modify)
   </Card>
-  <Card title="Guardrails" href="/docs/guardrails">
+  <Card title="Guardrails" href="/guardrails">
     Input and output validation with tripwire support
   </Card>
-  <Card title="Tracing" href="/docs/tracing">
+  <Card title="Tracing" href="/tracing">
     Built-in span-based tracing via AsyncLocalStorage
+  </Card>
+  <Card title="Usage & Cost Tracking" href="/usage-tracking">
+    Built-in cost estimation, budget limits, and reasoning token tracking
   </Card>
 </Cards>
 
@@ -109,22 +112,24 @@ The core layer defines the `Model` interface. Azure is the built-in implementati
 End-to-end examples showing how to combine features into real agents:
 
 <Cards>
-  <Card title="Agentic Tool Use" href="/docs/guides/agentic-tool-use">
+  <Card title="Agentic Tool Use" href="/guides/agentic-tool-use">
     Tool loops, parallel calls, context, streaming, and control
   </Card>
-  <Card title="Real-Time Streaming" href="/docs/guides/real-time-streaming">
+  <Card title="Real-Time Streaming" href="/guides/real-time-streaming">
     Stream to CLI, SSE endpoints, and multi-turn sessions
   </Card>
-  <Card title="Customer Support Agent" href="/docs/guides/customer-support-agent">
+  <Card title="Customer Support Agent" href="/guides/customer-support-agent">
     Multi-agent triage with handoffs, hooks, and guardrails
   </Card>
-  <Card title="Research Agent" href="/docs/guides/research-agent">
+  <Card title="Research Agent" href="/guides/research-agent">
     Orchestrate subagents for web research and data analysis
   </Card>
-  <Card title="Data Extraction Pipeline" href="/docs/guides/data-extraction">
+  <Card title="Data Extraction Pipeline" href="/guides/data-extraction">
     Structured output with validation guardrails and batch processing
   </Card>
 </Cards>
+
+## Project Structure
 
 <Files>
   <Folder name="src" defaultOpen>
@@ -138,6 +143,7 @@ End-to-end examples showing how to combine features into real agents:
       <File name="hooks.ts" />
       <File name="guardrails.ts" />
       <File name="tracing.ts" />
+      <File name="cost.ts" />
       <File name="types.ts" />
       <File name="model.ts" />
       <File name="errors.ts" />
