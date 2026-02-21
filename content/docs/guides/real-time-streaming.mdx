@@ -70,7 +70,7 @@ for await (const event of s) {
 ```
 
 <Callout type="info">
-When an agent uses tools, streaming events come from multiple model calls. Stratus handles the full tool loop — you see tool events from the first call, then content events from the final response. Each model call emits its own `done` event.
+When an agent uses tools, streaming events come from multiple model calls. Stratus handles the full tool loop - you see tool events from the first call, then content events from the final response. Each model call emits its own `done` event.
 </Callout>
 
 ## Streaming with tools
@@ -122,7 +122,7 @@ for await (const event of s) {
       process.stdout.write(" done\n"); // [!code highlight]
       break;
     case "done":
-      // Fires once per model call — expect two: one for tool calls, one for final response
+      // Fires once per model call - expect two: one for tool calls, one for final response
       break;
   }
 }
@@ -399,7 +399,7 @@ for await (const event of session.stream()) {
 }
 console.log(); // newline
 
-// Second turn — model remembers the first turn
+// Second turn - model remembers the first turn
 session.send("And what about Germany?"); // [!code highlight]
 for await (const event of session.stream()) {
   if (event.type === "content_delta") {

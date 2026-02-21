@@ -73,7 +73,7 @@ createServer(async (req, res) => {
     res.end(result.output);
   } catch (error) {
     if (error instanceof RunAbortedError) {
-      // Client disconnected — nothing to send
+      // Client disconnected - nothing to send
       return;
     }
     res.writeHead(500);
@@ -138,7 +138,7 @@ try {
 
 ## With sessions
 
-Pass the signal to `session.stream()`. The signal is per-invocation, not per-session — you can abort one turn and continue using the session for subsequent turns.
+Pass the signal to `session.stream()`. The signal is per-invocation, not per-session - you can abort one turn and continue using the session for subsequent turns.
 
 ```ts title="session-abort.ts"
 import { createSession, RunAbortedError } from "stratus/core";
@@ -163,7 +163,7 @@ try {
 
 ## RunAbortedError
 
-`RunAbortedError` extends `StratusError`. It is thrown whenever a signal is aborted — whether before the run starts or mid-execution.
+`RunAbortedError` extends `StratusError`. It is thrown whenever a signal is aborted - whether before the run starts or mid-execution.
 
 ```ts title="error-handling.ts"
 import { RunAbortedError, StratusError } from "stratus/core";

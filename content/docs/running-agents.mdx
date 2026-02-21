@@ -106,7 +106,7 @@ for await (const event of s) {
       process.stdout.write(event.content);
       break;
     case "done":
-      // One 'done' per model call — multiple if tools are used
+      // One 'done' per model call - multiple if tools are used
       console.log(`Tokens: ${event.response.usage?.totalTokens}`);
       break;
   }

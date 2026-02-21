@@ -24,7 +24,7 @@ The `AgentConfig` interface accepts these properties:
 | Property | Type | Description |
 | --- | --- | --- |
 | `name` | `string` | **Required.** Agent name, used in handoff tool names and tracing |
-| `instructions` | `string \| (ctx) => string` | System prompt — can be a string or async function |
+| `instructions` | `string \| (ctx) => string` | System prompt - can be a string or async function |
 | `model` | `Model` | LLM model to use |
 | `tools` | `FunctionTool[]` | Available [tools](/docs/tools) |
 | `subagents` | `SubAgent[]` | [Sub-agents](/docs/subagents) that run as tool calls |
@@ -113,7 +113,7 @@ Control what happens after tool calls execute:
 <Tabs items={["run_llm_again", "stop_on_first_tool", "stopAtToolNames"]}>
 <Tab value="run_llm_again">
 
-Default behavior — send tool results back to the model for another response:
+Default behavior - send tool results back to the model for another response:
 
 ```ts
 toolUseBehavior: "run_llm_again"

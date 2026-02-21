@@ -48,7 +48,7 @@ Stratus sends the updated message history back to the model. The model can call 
 </Steps>
 
 <Callout type="info">
-Stratus handles this entire loop automatically. You define tools and call `run()` — the SDK manages message passing, JSON parsing, validation, retries, and multi-round execution.
+Stratus handles this entire loop automatically. You define tools and call `run()` - the SDK manages message passing, JSON parsing, validation, retries, and multi-round execution.
 </Callout>
 
 ## Quick start
@@ -246,7 +246,7 @@ const agent = new Agent({
   model,
   tools: [getWeather],
   modelSettings: {
-    toolChoice: "auto", // default — model decides
+    toolChoice: "auto", // default - model decides
   },
 });
 ```
@@ -337,7 +337,7 @@ const agent = new Agent({
 });
 
 const result = await run(agent, "What is 42 * 17?");
-console.log(result.output); // "714" — raw tool output, no model summary
+console.log(result.output); // "714" - raw tool output, no model summary
 ```
 
 </Tab>
@@ -368,7 +368,7 @@ When `toolUseBehavior` stops early, `result.output` contains the raw tool output
 
 ## Tool errors and recovery
 
-When a tool's `execute` function throws, Stratus catches the error and sends the error message back to the model as the tool result. The model sees the error and can adjust — retry with different parameters, try a different tool, or respond to the user with an explanation.
+When a tool's `execute` function throws, Stratus catches the error and sends the error message back to the model as the tool result. The model sees the error and can adjust - retry with different parameters, try a different tool, or respond to the user with an explanation.
 
 ```ts title="error-recovery.ts"
 import { AzureResponsesModel } from "stratus";
@@ -410,8 +410,8 @@ console.log(result.output);
 
 The error message format matters. Write error messages that help the model take the right next step. Compare:
 
-- **Bad**: `"Error: ENOENT"` — the model has no idea what to do
-- **Good**: `"No user found with email \"typo@exmple.com\". Try a different email."` — the model can ask the user for the correct email
+- **Bad**: `"Error: ENOENT"` - the model has no idea what to do
+- **Good**: `"No user found with email \"typo@exmple.com\". Try a different email."` - the model can ask the user for the correct email
 
 <Callout type="info">
 Tool errors never crash the run. They flow back to the model as information. Only `MaxTurnsExceededError` and `RunAbortedError` will terminate the loop.
@@ -419,7 +419,7 @@ Tool errors never crash the run. They flow back to the model as information. Onl
 
 ## Streaming with tools
 
-When you use `stream()`, you receive real-time events during the entire tool loop — including tool call events between model turns.
+When you use `stream()`, you receive real-time events during the entire tool loop - including tool call events between model turns.
 
 ```ts title="stream-tools.ts"
 import { AzureResponsesModel } from "stratus";
@@ -479,14 +479,14 @@ console.log(finalResult.output);
 
 A typical event sequence for a tool-using agent:
 
-1. `tool_call_start` — model begins a tool call
-2. `tool_call_delta` — incremental JSON arguments arrive (useful for progress UI)
-3. `tool_call_done` — arguments are complete, execution begins
-4. `done` — first model response is finished, tools execute
-5. `content_delta` — second model turn streams the final answer
-6. `done` — final response complete
+1. `tool_call_start` - model begins a tool call
+2. `tool_call_delta` - incremental JSON arguments arrive (useful for progress UI)
+3. `tool_call_done` - arguments are complete, execution begins
+4. `done` - first model response is finished, tools execute
+5. `content_delta` - second model turn streams the final answer
+6. `done` - final response complete
 
-You see multiple `done` events in a multi-turn run — one per model call.
+You see multiple `done` events in a multi-turn run - one per model call.
 
 ## Tools with context
 
@@ -614,7 +614,7 @@ The abort signal is checked between every model call and tool execution. When ab
 ## Compared to raw API calls
 
 <Callout type="info">
-Without Stratus, function calling requires you to manually manage the message array, parse JSON arguments, dispatch to functions by name, and make multiple API calls in a loop. Stratus eliminates all of this — define your tools and call `run()`.
+Without Stratus, function calling requires you to manually manage the message array, parse JSON arguments, dispatch to functions by name, and make multiple API calls in a loop. Stratus eliminates all of this - define your tools and call `run()`.
 </Callout>
 
 Here's the same two-tool agent, with and without Stratus:

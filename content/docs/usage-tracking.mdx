@@ -42,7 +42,7 @@ Cache token fields are only present when Azure returns prompt caching details. W
 When a run involves multiple model calls (tool calls followed by a final response), usage is the sum across all calls.
 </Callout>
 
-Each model call in the run loop adds its tokens to the running total. A run that calls two tools makes at least two model calls — one that produces the tool calls, and one that generates the final response:
+Each model call in the run loop adds its tokens to the running total. A run that calls two tools makes at least two model calls - one that produces the tool calls, and one that generates the final response:
 
 ```ts title="tool-usage.ts"
 import { Agent, run, tool } from "stratus/core";
@@ -197,7 +197,7 @@ The trace gives you per-call breakdowns while `result.usage` gives you the aggre
 
 ## Next Steps
 
-- [Streaming](/docs/streaming) — Stream events include per-call usage in the `done` event
-- [Tracing](/docs/tracing) — Inspect per-span usage metadata for detailed breakdowns
-- [Sessions](/docs/sessions) — Track usage across multi-turn conversations
-- [Tools](/docs/tools) — Understand how tool loops affect token consumption
+- [Streaming](/docs/streaming) - Stream events include per-call usage in the `done` event
+- [Tracing](/docs/tracing) - Inspect per-span usage metadata for detailed breakdowns
+- [Sessions](/docs/sessions) - Track usage across multi-turn conversations
+- [Tools](/docs/tools) - Understand how tool loops affect token consumption

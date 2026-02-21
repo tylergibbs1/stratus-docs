@@ -3,7 +3,7 @@ title: Custom Model Providers
 description: Implement the Model interface to use any LLM provider
 ---
 
-Stratus is provider-agnostic at its core. The `stratus/core` package defines a `Model` interface that any LLM provider can implement. Azure is the built-in implementation, but you can plug in OpenAI, Anthropic, local models, or anything else. Custom models work with all SDK features — tools, handoffs, guardrails, sessions, and tracing.
+Stratus is provider-agnostic at its core. The `stratus/core` package defines a `Model` interface that any LLM provider can implement. Azure is the built-in implementation, but you can plug in OpenAI, Anthropic, local models, or anything else. Custom models work with all SDK features - tools, handoffs, guardrails, sessions, and tracing.
 
 ## The Model interface
 
@@ -101,7 +101,7 @@ The `ModelRequest` object is passed to both model methods. It contains everythin
 | Field | Type | Description |
 | --- | --- | --- |
 | `messages` | `ChatMessage[]` | The conversation history (system, user, assistant, tool messages) |
-| `tools` | `ToolDefinition[]` | Tool definitions the model can call. Optional — omitted when the agent has no tools |
+| `tools` | `ToolDefinition[]` | Tool definitions the model can call. Optional - omitted when the agent has no tools |
 | `modelSettings` | `ModelSettings` | Temperature, max tokens, top-p, stop sequences, tool choice, and other generation parameters |
 | `responseFormat` | `ResponseFormat` | Output format constraint (`text`, `json_object`, or `json_schema` for structured output) |
 
@@ -278,12 +278,12 @@ export class OpenAIModel implements Model {
 ```
 
 <Callout type="info">
-The built-in `AzureChatCompletionsModel` is a reference implementation. Use its source code as a guide for building your own — it covers SSE parsing, retry logic, abort signal handling, and error mapping.
+The built-in `AzureChatCompletionsModel` is a reference implementation. Use its source code as a guide for building your own - it covers SSE parsing, retry logic, abort signal handling, and error mapping.
 </Callout>
 
 ## Using your custom model
 
-Custom models are passed anywhere the SDK accepts a `Model`. There is no registration step — just instantiate and use.
+Custom models are passed anywhere the SDK accepts a `Model`. There is no registration step - just instantiate and use.
 
 ### With an Agent and run()
 
@@ -360,7 +360,7 @@ const result = await run(agent, "Hello", { model: otherModel });
 
 ## Next steps
 
-- [Tools](/docs/tools) — Give your custom model tool-calling capabilities
-- [Streaming](/docs/streaming) — Stream responses from any model provider
-- [Sessions](/docs/sessions) — Multi-turn conversations with persistent history
-- [Tracing](/docs/tracing) — Trace model calls for observability and debugging
+- [Tools](/docs/tools) - Give your custom model tool-calling capabilities
+- [Streaming](/docs/streaming) - Stream responses from any model provider
+- [Sessions](/docs/sessions) - Multi-turn conversations with persistent history
+- [Tracing](/docs/tracing) - Trace model calls for observability and debugging

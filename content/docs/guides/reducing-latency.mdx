@@ -66,7 +66,7 @@ Use the fast model for agents that do simple, well-defined tasks:
 ```ts title="tiered-agents.ts"
 import { Agent } from "stratus/core";
 
-// Router: classifies intent — fast model is fine
+// Router: classifies intent - fast model is fine
 const router = new Agent({
   name: "router",
   model: fastModel, // [!code highlight]
@@ -74,7 +74,7 @@ const router = new Agent({
   outputType: z.object({ intent: z.enum(["billing", "technical", "account", "other"]) }),
 });
 
-// Researcher: synthesizes complex answers — needs the full model
+// Researcher: synthesizes complex answers - needs the full model
 const researcher = new Agent({
   name: "researcher",
   model: fullModel, // [!code highlight]
@@ -116,8 +116,8 @@ const agent = new Agent({
 
 Tips for leaner instructions:
 
-- Remove preamble like "You are a highly capable..." — the model does not need flattery to perform well
-- Use `outputType` with Zod instead of explaining output format in prose — the schema is the instruction
+- Remove preamble like "You are a highly capable..." - the model does not need flattery to perform well
+- Use `outputType` with Zod instead of explaining output format in prose - the schema is the instruction
 - Put per-request context in the user message, not in static instructions
 - Use `.describe()` on Zod fields instead of duplicating field descriptions in the system prompt
 
@@ -175,7 +175,7 @@ const searchUsers = tool({
   parameters: z.object({ query: z.string() }),
   execute: async (ctx, { query }) => {
     const ids = await ctx.db.users.search(query);
-    return JSON.stringify(ids); // Just IDs — model must call getUser next
+    return JSON.stringify(ids); // Just IDs - model must call getUser next
   },
 });
 ```
@@ -203,7 +203,7 @@ const agent = new Agent({
   model,
   tools: [getRevenue, getActiveUsers, getErrorRate],
   modelSettings: {
-    parallelToolCalls: true, // default — tools run concurrently // [!code highlight]
+    parallelToolCalls: true, // default - tools run concurrently // [!code highlight]
   },
 });
 
@@ -215,7 +215,7 @@ If you have explicitly set `parallelToolCalls: false`, consider re-enabling it f
 
 ## Use stop_on_first_tool for extraction
 
-When an agent exists solely to call a tool and return its result, the default behavior wastes a model call. After the tool executes, the model is called again to summarize the result in natural language. With `stop_on_first_tool`, the run ends immediately after tool execution — no second model call.
+When an agent exists solely to call a tool and return its result, the default behavior wastes a model call. After the tool executes, the model is called again to summarize the result in natural language. With `stop_on_first_tool`, the run ends immediately after tool execution - no second model call.
 
 ```ts title="stop-on-first.ts"
 import { Agent, run, tool } from "stratus/core";
@@ -240,7 +240,7 @@ const orderFetcher = new Agent({
 });
 
 const result = await run(orderFetcher, "Get order ORD-1234");
-console.log(result.output); // Raw JSON from fetchOrder — no model summary
+console.log(result.output); // Raw JSON from fetchOrder - no model summary
 ```
 
 This eliminates the second model call entirely, cutting total latency roughly in half for single-tool agents.
@@ -269,7 +269,7 @@ try {
   console.log(result.output);
 } catch (error) {
   if (error instanceof RunAbortedError) {
-    console.log("Agent timed out — returning cached result");
+    console.log("Agent timed out - returning cached result");
     return getCachedResult(); // Fallback to cached data // [!code highlight]
   }
   throw error;
@@ -299,7 +299,7 @@ app.post("/chat", async (req, res) => {
 
 ## Measure with tracing
 
-Guessing at bottlenecks wastes time. Wrap your agent calls in `withTrace()` to see exactly where time is spent — model calls vs. tool execution vs. guardrails.
+Guessing at bottlenecks wastes time. Wrap your agent calls in `withTrace()` to see exactly where time is spent - model calls vs. tool execution vs. guardrails.
 
 ```ts title="trace-latency.ts"
 import { withTrace, run, Agent, tool } from "stratus/core";
@@ -330,12 +330,12 @@ console.log(`Overhead: ${trace.duration! - modelTime - toolTime}ms`);
 
 Use this data to decide where to optimize:
 
-- **Model time dominates** — try a smaller model, shorter instructions, or `maxTokens`
-- **Tool time dominates** — optimize your tool implementations, add caching, or use faster data sources
-- **Many model calls** — reduce tool round-trips or use `stop_on_first_tool`
+- **Model time dominates** - try a smaller model, shorter instructions, or `maxTokens`
+- **Tool time dominates** - optimize your tool implementations, add caching, or use faster data sources
+- **Many model calls** - reduce tool round-trips or use `stop_on_first_tool`
 
 <Callout type="info">
-Tracing is opt-in. When `withTrace()` is not used, all tracing code paths are skipped with zero overhead. There is no performance cost to having tracing code in your production agents — it only runs when you activate it.
+Tracing is opt-in. When `withTrace()` is not used, all tracing code paths are skipped with zero overhead. There is no performance cost to having tracing code in your production agents - it only runs when you activate it.
 </Callout>
 
 ## Summary
@@ -344,12 +344,12 @@ Tracing is opt-in. When `withTrace()` is not used, all tracing code paths are sk
 | --- | --- | --- |
 | Use `stream()` | Perceived latency drops to ~200ms time-to-first-token | Total generation time is unchanged |
 | Smaller model | 2-5x faster responses for simple tasks | Lower capability ceiling for complex reasoning |
-| Shorter instructions | Faster time-to-first-token, lower prompt cost | Must be precise — vague instructions hurt accuracy |
+| Shorter instructions | Faster time-to-first-token, lower prompt cost | Must be precise - vague instructions hurt accuracy |
 | Set `maxTokens` | Predictable, bounded response times | Output may truncate if set too low |
 | Return complete data from tools | Fewer model round-trips | Larger tool responses consume more context tokens |
 | `parallelToolCalls` | Concurrent tool execution instead of sequential | Model must support parallel calls (default in gpt-5.2) |
-| `stop_on_first_tool` | Eliminates the second model call entirely | No model-formatted summary — raw tool output only |
-| `AbortSignal.timeout()` | Hard deadline prevents runaway operations | Incomplete results on timeout — need a fallback |
+| `stop_on_first_tool` | Eliminates the second model call entirely | No model-formatted summary - raw tool output only |
+| `AbortSignal.timeout()` | Hard deadline prevents runaway operations | Incomplete results on timeout - need a fallback |
 | `withTrace()` | Data-driven optimization instead of guessing | Small overhead when active (zero when inactive) |
 
 ## Next steps

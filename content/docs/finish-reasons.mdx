@@ -3,7 +3,7 @@ title: Finish Reasons
 description: Understand why a model stopped generating and how the run loop responds
 ---
 
-Every model response includes a `finishReason` — why the model stopped generating. The run loop uses this to decide what happens next: execute tool calls, return a result, or throw an error.
+Every model response includes a `finishReason` - why the model stopped generating. The run loop uses this to decide what happens next: execute tool calls, return a result, or throw an error.
 
 ## Finish reason values
 
@@ -89,7 +89,7 @@ for await (const event of s) {
 }
 
 const finalResult = await result;
-console.log(finalResult.finishReason); // "stop" — from the last model call // [!code highlight]
+console.log(finalResult.finishReason); // "stop" - from the last model call // [!code highlight]
 ```
 
 ### From a session
@@ -143,7 +143,7 @@ const agent = new Agent({
 
 const result = await run(agent, "Write a detailed analysis of TypeScript's type system");
 if (result.finishReason === "length") {
-  console.warn("Response was truncated — consider increasing maxTokens");
+  console.warn("Response was truncated - consider increasing maxTokens");
 }
 ```
 
@@ -188,7 +188,7 @@ for await (const event of s) {
       process.stdout.write(event.content);
       break;
     case "done":
-      // Available here — one 'done' event per model call
+      // Available here - one 'done' event per model call
       console.log("\nFinish reason:", event.response.finishReason); // [!code highlight]
       break;
   }

@@ -6,7 +6,7 @@ description: Give agents the ability to call functions
 Tools let agents call your TypeScript functions. Each tool has a name, description, Zod parameter schema, and an execute function.
 
 <Callout type="info">
-Stratus handles the full tool loop automatically — Zod validation, parallel execution, error recovery, and 429 retries. No `JSON.parse()`, no dispatch tables, no manual message management. See the [Agentic Tool Use guide](/docs/guides/agentic-tool-use) for the full picture.
+Stratus handles the full tool loop automatically - Zod validation, parallel execution, error recovery, and 429 retries. No `JSON.parse()`, no dispatch tables, no manual message management. See the [Agentic Tool Use guide](/docs/guides/agentic-tool-use) for the full picture.
 </Callout>
 
 ## Defining a Tool
@@ -39,9 +39,9 @@ const getWeather = tool({
 | `execute` | `(context, params, options?) => string` | Function that runs when the model calls the tool |
 
 The `execute` function receives up to three arguments:
-1. **`context`** — The context object passed via `run()` options or session config
-2. **`params`** — Parsed and validated parameters matching the Zod schema
-3. **`options`** — Optional `ToolExecuteOptions` with an `AbortSignal` for cancellation
+1. **`context`** - The context object passed via `run()` options or session config
+2. **`params`** - Parsed and validated parameters matching the Zod schema
+3. **`options`** - Optional `ToolExecuteOptions` with an `AbortSignal` for cancellation
 
 ## Using Context
 
@@ -151,7 +151,7 @@ const searchTool = tool({
 });
 ```
 
-See [Streaming — Abort Signal](/docs/streaming#abort-signal) for details on passing a signal.
+See [Streaming - Abort Signal](/docs/streaming#abort-signal) for details on passing a signal.
 
 ## Error Handling
 

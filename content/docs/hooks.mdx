@@ -125,7 +125,7 @@ type HandoffDecision =
   | { decision: "deny"; reason?: string };
 ```
 
-When denied, the agent switch is blocked — `result.lastAgent` remains the current agent. The denial `reason` is returned as the tool message.
+When denied, the agent switch is blocked - `result.lastAgent` remains the current agent. The denial `reason` is returned as the tool message.
 
 ```ts title="deny-handoff.ts"
 hooks: {
@@ -209,7 +209,7 @@ const session = createSession({
 - `afterToolCall` **does** fire with the result
 </Accordion>
 <Accordion title="What happens when a handoff is denied?">
-- The agent switch is blocked — `currentAgent` stays the same
+- The agent switch is blocked - `currentAgent` stays the same
 - The denial reason replaces the "Transferred to X" tool message
 - The model loop continues with the original agent
 </Accordion>

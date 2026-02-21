@@ -26,7 +26,7 @@ The session API follows a simple two-step pattern:
 
 ### Queue a message
 
-`send(message)` queues a user message synchronously — no API call is made.
+`send(message)` queues a user message synchronously - no API call is made.
 
 ```ts
 session.send("What's the weather in NYC?");
@@ -86,9 +86,9 @@ for await (const event of session.stream()) {
 ```
 
 <Callout type="info" title="Content Part Types">
-`TextContentPart` — `{ type: "text", text: string }`
+`TextContentPart` - `{ type: "text", text: string }`
 
-`ImageContentPart` — `{ type: "image_url", image_url: { url: string, detail?: "auto" | "low" | "high" } }`
+`ImageContentPart` - `{ type: "image_url", image_url: { url: string, detail?: "auto" | "low" | "high" } }`
 </Callout>
 
 The `prompt()` function also accepts `ContentPart[]`:
@@ -118,7 +118,7 @@ Access the accumulated conversation history at any time:
 
 ```ts
 const messages = session.messages;
-// Returns a copy — mutating it won't affect the session
+// Returns a copy - mutating it won't affect the session
 ```
 
 <Callout>
@@ -134,8 +134,8 @@ Sessions can be saved to a snapshot and resumed or forked later. This enables pe
 
 ```ts title="save.ts"
 const snapshot = session.save();
-// snapshot.id — same as session.id
-// snapshot.messages — deep copy of the conversation history
+// snapshot.id - same as session.id
+// snapshot.messages - deep copy of the conversation history
 ```
 
 <Callout type="warn">
@@ -203,7 +203,7 @@ try {
 ```
 
 <Callout type="info">
-The signal is per-invocation, not per-session. See [Streaming — Abort Signal](/docs/streaming#abort-signal) for more details.
+The signal is per-invocation, not per-session. See [Streaming - Abort Signal](/docs/streaming#abort-signal) for more details.
 </Callout>
 
 ## Cleanup

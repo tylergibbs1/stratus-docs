@@ -381,7 +381,7 @@ const agent = new Agent({
 ### Too vague
 
 ```ts
-// Bad — the model has no idea what domain, format, or constraints to follow
+// Bad - the model has no idea what domain, format, or constraints to follow
 instructions: "Be helpful and answer questions."
 ```
 
@@ -390,7 +390,7 @@ Fix it by specifying the domain, output format, and boundaries.
 ### Too long
 
 ```ts
-// Bad — 2000-word instructions with every edge case
+// Bad - 2000-word instructions with every edge case
 instructions: `You are an assistant. Here are 47 rules you must follow...
 Rule 1: Always greet the user. Rule 2: Never say "I don't know."
 Rule 3: If the user says "hello" respond with "Hi there!" ...`
@@ -401,7 +401,7 @@ Long instructions waste tokens and can confuse the model. If rules conflict (and
 ### Conflicting instructions
 
 ```ts
-// Bad — "be concise" contradicts "explain your reasoning in detail"
+// Bad - "be concise" contradicts "explain your reasoning in detail"
 instructions: `Be concise. Keep answers short.
 Always explain your reasoning in detail so the user understands.`
 ```
@@ -411,7 +411,7 @@ The model cannot satisfy both. Pick one and commit to it. If you need both behav
 ### Instructions that duplicate tool descriptions
 
 ```ts
-// Bad — repeating what the tool description already says
+// Bad - repeating what the tool description already says
 instructions: `You have a tool called search_products. It searches the product
 catalog by keyword and returns up to 10 results with name, price, and ID.
 You also have a tool called get_product_details. It takes a product ID and
@@ -423,7 +423,7 @@ The model already sees tool descriptions in every request. Instead, tell it _whe
 ### Prompting for behavior you should enforce in code
 
 ```ts
-// Bad — relying on instructions for security
+// Bad - relying on instructions for security
 instructions: "Never process refunds over $500."
 ```
 

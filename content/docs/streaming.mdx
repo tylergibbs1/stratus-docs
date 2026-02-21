@@ -3,7 +3,7 @@ title: Streaming
 description: Real-time streaming of model responses
 ---
 
-Streaming displays partial responses as they arrive. Stratus supports it at every level — sessions, `stream()`, and the raw model interface.
+Streaming displays partial responses as they arrive. Stratus supports it at every level - sessions, `stream()`, and the raw model interface.
 
 ## Stream Events
 
@@ -68,7 +68,7 @@ for await (const event of session.stream()) {
       process.stdout.write(event.content);
       break;
     case "done":
-      // One 'done' per model call — you may see multiple if tools are used
+      // One 'done' per model call - you may see multiple if tools are used
       break;
   }
 }

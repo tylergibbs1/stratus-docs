@@ -146,8 +146,8 @@ Both models use Server-Sent Events (SSE) with a shared zero-dependency parser. E
 
 Both models throw the same errors for failure modes:
 
-- **`ModelError`** — General API errors (4xx/5xx responses)
-- **`ContentFilterError`** — Azure content filter blocked the request or response
+- **`ModelError`** - General API errors (4xx/5xx responses)
+- **`ContentFilterError`** - Azure content filter blocked the request or response
 
 ```ts title="error-handling.ts"
 import { ModelError, ContentFilterError } from "stratus/core";

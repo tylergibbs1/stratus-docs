@@ -19,9 +19,9 @@ npm install stratus zod
 
 You need an Azure OpenAI resource with a deployed model. You'll need:
 
-- **Endpoint** — Your Azure OpenAI endpoint URL
-- **API Key** — An API key for authentication
-- **Deployment** — The name of your deployed model (e.g. `gpt-5.2`)
+- **Endpoint** - Your Azure OpenAI endpoint URL
+- **API Key** - An API key for authentication
+- **Deployment** - The name of your deployed model (e.g. `gpt-5.2`)
 
 ## Create a Model
 
@@ -40,7 +40,7 @@ const model = new AzureChatCompletionsModel({
 <Tabs items={["prompt()", "Session", "run()"]}>
 <Tab value="prompt()">
 
-The simplest approach — send a message and get a result:
+The simplest approach - send a message and get a result:
 
 ```ts title="one-shot.ts"
 import { prompt } from "stratus/core";
@@ -67,7 +67,7 @@ for await (const event of session.stream()) {
   if (event.type === "content_delta") process.stdout.write(event.content);
 }
 
-// Send another message — previous context is preserved
+// Send another message - previous context is preserved
 session.send("What did I just say?");
 for await (const event of session.stream()) {
   if (event.type === "content_delta") process.stdout.write(event.content);

@@ -9,16 +9,16 @@ Stratus is a TypeScript SDK for building AI agents powered by Azure OpenAI. It p
 
 Azure OpenAI's v1 API lets you use the standard `OpenAI()` client, point it at your Azure endpoint, and things mostly just work. But "mostly" isn't good enough for production.
 
-The OpenAI SDK gives you `chat.completions.create()`. Everything else — the tool loop, agent abstractions, streaming, error handling, multi-agent orchestration — is on you:
+The OpenAI SDK gives you `chat.completions.create()`. Everything else - the tool loop, agent abstractions, streaming, error handling, multi-agent orchestration - is on you:
 
-- **Tool calling requires a manual loop.** Stratus handles the entire [tool loop](/docs/guides/agentic-tool-use) — one `run()` call with parallel execution, validation, and error recovery.
+- **Tool calling requires a manual loop.** Stratus handles the entire [tool loop](/docs/guides/agentic-tool-use) - one `run()` call with parallel execution, validation, and error recovery.
 - **No agent abstraction.** Stratus gives you [composable agents](/docs/agents) with instructions, tools, guardrails, and handoffs in a single config object.
-- **Basic streaming.** Stratus provides typed [stream events](/docs/streaming) — `content_delta`, `tool_call_start`, `tool_call_done` — with accumulation and a final `RunResult`.
+- **Basic streaming.** Stratus provides typed [stream events](/docs/streaming) - `content_delta`, `tool_call_start`, `tool_call_done` - with accumulation and a final `RunResult`.
 - **Opaque content filter errors.** Stratus throws a typed [`ContentFilterError`](/docs/errors) instead of Azure's buried `inner_error.content_filter_results`.
 - **No multi-agent orchestration.** [Handoffs](/docs/handoffs), [subagents](/docs/subagents), [guardrails](/docs/guardrails), and [hooks](/docs/hooks) are first-class.
-- **Responses API support.** Both [Chat Completions and Responses API](/docs/azure) through the same `Model` interface — swap with one line.
+- **Responses API support.** Both [Chat Completions and Responses API](/docs/azure) through the same `Model` interface - swap with one line.
 
-The goal: clean, typed, zero-config for the common case — while properly wrapping Azure's unique capabilities.
+The goal: clean, typed, zero-config for the common case - while properly wrapping Azure's unique capabilities.
 
 ## Features
 
