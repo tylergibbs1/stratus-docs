@@ -477,7 +477,7 @@ instructions: "Never process refunds over $500."
 The model might follow this, or it might not. For hard constraints, use hooks (`beforeToolCall` with a `"deny"` decision) or guardrails. Instructions are for guiding behavior, not enforcing invariants.
 
 <Callout type="warn">
-Instructions are suggestions to the model, not guarantees. For anything that must be enforced 100% of the time (spending limits, PII redaction, access control), use [hooks](/docs/hooks) or [guardrails](/docs/guardrails) in code.
+Instructions are suggestions to the model, not guarantees. For anything that must be enforced 100% of the time (spending limits, PII redaction, access control), use [hooks](/hooks) or [guardrails](/guardrails) in code.
 </Callout>
 
 ## Next steps

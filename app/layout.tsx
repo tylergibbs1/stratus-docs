@@ -1,7 +1,10 @@
 import "./global.css";
 import { RootProvider } from "fumadocs-ui/provider/next";
+import { DocsLayout } from "fumadocs-ui/layouts/docs";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import type { ReactNode } from "react";
+import { source } from "@/lib/source";
+import { baseOptions } from "@/app/layout.config";
 
 const inter = Inter({
 	subsets: ["latin"],
@@ -25,7 +28,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 	return (
 		<html lang="en" suppressHydrationWarning>
 			<body className={`${inter.variable} ${jetbrainsMono.variable}`}>
-				<RootProvider>{children}</RootProvider>
+				<RootProvider>
+					<DocsLayout tree={source.pageTree} {...baseOptions}>
+						{children}
+					</DocsLayout>
+				</RootProvider>
 			</body>
 		</html>
 	);

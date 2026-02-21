@@ -96,7 +96,7 @@ The system prompt is replaced with the new agent's instructions. The model loop 
 </Steps>
 
 <Callout type="info">
-Handoffs can be blocked by `beforeHandoff` hooks returning `{ decision: "deny" }`. See [Hooks - Permission Control](/docs/hooks#permission-control).
+Handoffs can be blocked by `beforeHandoff` hooks returning `{ decision: "deny" }`. See [Hooks - Permission Control](/hooks#permission-control).
 </Callout>
 
 ## Handoffs in Sessions
@@ -153,5 +153,5 @@ const triage = new Agent({
 ```
 
 <Callout type="info" title="Handoffs vs Subagents">
-Handoffs **transfer control** - the child takes over. Subagents **delegate and return** - the parent keeps control. See [Subagents](/docs/subagents) for the delegation pattern.
+Handoffs **transfer control** - the child takes over. Subagents **delegate and return** - the parent keeps control. See [Subagents](/subagents) for the delegation pattern.
 </Callout>

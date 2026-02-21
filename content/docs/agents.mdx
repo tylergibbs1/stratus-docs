@@ -26,14 +26,14 @@ The `AgentConfig` interface accepts these properties:
 | `name` | `string` | **Required.** Agent name, used in handoff tool names and tracing |
 | `instructions` | `string \| (ctx) => string` | System prompt - can be a string or async function |
 | `model` | `Model` | LLM model to use |
-| `tools` | `FunctionTool[]` | Available [tools](/docs/tools) |
-| `subagents` | `SubAgent[]` | [Sub-agents](/docs/subagents) that run as tool calls |
+| `tools` | `FunctionTool[]` | Available [tools](/tools) |
+| `subagents` | `SubAgent[]` | [Sub-agents](/subagents) that run as tool calls |
 | `modelSettings` | `ModelSettings` | Temperature, max tokens, etc. |
-| `outputType` | `z.ZodType` | Zod schema for [structured output](/docs/structured-output) |
-| `handoffs` | `HandoffInput[]` | Other agents this agent can [hand off](/docs/handoffs) to |
-| `inputGuardrails` | `InputGuardrail[]` | Pre-execution [guardrails](/docs/guardrails) |
-| `outputGuardrails` | `OutputGuardrail[]` | Post-execution [guardrails](/docs/guardrails) |
-| `hooks` | `AgentHooks` | Lifecycle [hooks](/docs/hooks) |
+| `outputType` | `z.ZodType` | Zod schema for [structured output](/structured-output) |
+| `handoffs` | `HandoffInput[]` | Other agents this agent can [hand off](/handoffs) to |
+| `inputGuardrails` | `InputGuardrail[]` | Pre-execution [guardrails](/guardrails) |
+| `outputGuardrails` | `OutputGuardrail[]` | Post-execution [guardrails](/guardrails) |
+| `hooks` | `AgentHooks` | Lifecycle [hooks](/hooks) |
 | `toolUseBehavior` | `ToolUseBehavior` | What to do after tool calls |
 
 ## Dynamic Instructions

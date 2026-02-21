@@ -39,7 +39,7 @@ console.log(result.finishReason); // "stop"
 console.log(result.finalOutput);  // undefined (no outputType set)
 ```
 
-If the agent has an `outputType`, `finalOutput` contains the parsed and validated object. See [Structured Output](/docs/structured-output) for details.
+If the agent has an `outputType`, `finalOutput` contains the parsed and validated object. See [Structured Output](/structured-output) for details.
 
 ### RunResult
 
@@ -49,7 +49,7 @@ If the agent has an `outputType`, `finalOutput` contains the parsed and validate
 | `finalOutput` | `TOutput` | Parsed structured output (if `outputType` is set on the agent) |
 | `messages` | `ChatMessage[]` | Full message history for the run, including system, user, assistant, and tool messages |
 | `usage` | `UsageInfo` | Accumulated token usage across all model calls in this run |
-| `lastAgent` | `Agent` | The agent that produced the final response (differs from the entry agent after a [handoff](/docs/handoffs)) |
+| `lastAgent` | `Agent` | The agent that produced the final response (differs from the entry agent after a [handoff](/handoffs)) |
 | `finishReason` | `string?` | The model's finish reason from the last call (`"stop"`, `"tool_calls"`, etc.) |
 
 `UsageInfo` includes `promptTokens`, `completionTokens`, `totalTokens`, and optional `cacheReadTokens` and `cacheCreationTokens` fields.
@@ -130,7 +130,7 @@ console.log(result.output); // "4"
 ```
 
 <Callout type="info">
-`prompt()` creates a temporary session under the hood. For multi-turn conversations, use [`createSession()`](/docs/sessions) instead.
+`prompt()` creates a temporary session under the hood. For multi-turn conversations, use [`createSession()`](/sessions) instead.
 </Callout>
 
 `prompt()` accepts the same configuration options as `createSession()` -- including `tools`, `instructions`, `outputType`, `guardrails`, and `hooks`.
@@ -235,7 +235,7 @@ for await (const event of session.stream()) {
 }
 ```
 
-See [Sessions](/docs/sessions) for the full API, including save/resume/fork and `Symbol.asyncDispose`.
+See [Sessions](/sessions) for the full API, including save/resume/fork and `Symbol.asyncDispose`.
 
 ## Next steps
 

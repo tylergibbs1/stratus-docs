@@ -203,7 +203,7 @@ try {
 ```
 
 <Callout type="info">
-The signal is per-invocation, not per-session. See [Streaming - Abort Signal](/docs/streaming#abort-signal) for more details.
+The signal is per-invocation, not per-session. See [Streaming - Abort Signal](/streaming#abort-signal) for more details.
 </Callout>
 
 ## Cleanup
@@ -249,7 +249,7 @@ console.log(result.output); // "4"
 | `model` | `Model` | **Required.** The LLM model |
 | `instructions` | `Instructions` | System prompt |
 | `tools` | `FunctionTool[]` | Available tools |
-| `subagents` | `SubAgent[]` | [Sub-agents](/docs/subagents) that run as tool calls |
+| `subagents` | `SubAgent[]` | [Sub-agents](/subagents) that run as tool calls |
 | `modelSettings` | `ModelSettings` | Temperature, max tokens, etc. |
 | `outputType` | `z.ZodType` | Structured output schema |
 | `handoffs` | `HandoffInput[]` | Handoff targets |
