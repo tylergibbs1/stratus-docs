@@ -14,8 +14,8 @@ Three ways to execute an agent. All handle the full tool loop, guardrails, hooks
 `run()` takes an agent and input, executes the full tool loop, and returns a `RunResult` when done. You get no intermediate output -- just the final result.
 
 ```ts title="run.ts"
-import { Agent, run } from "stratus/core";
-import { AzureResponsesModel } from "stratus";
+import { Agent, run } from "stratus-sdk/core";
+import { AzureResponsesModel } from "stratus-sdk";
 
 const model = new AzureResponsesModel({
   endpoint: process.env.AZURE_ENDPOINT!,
@@ -61,7 +61,7 @@ If the agent has an `outputType`, `finalOutput` contains the parsed and validate
 `stream()` returns two things: an async generator of `StreamEvent` objects and a `Promise<RunResult>`. You must drain the stream before awaiting the result.
 
 ```ts title="stream.ts"
-import { Agent, stream } from "stratus/core";
+import { Agent, stream } from "stratus-sdk/core";
 
 const agent = new Agent({
   name: "writer",
@@ -120,7 +120,7 @@ for await (const event of s) {
 `prompt()` is the simplest way to get a response. It creates a temporary session, sends your message, drains the stream, and returns the result.
 
 ```ts title="prompt.ts"
-import { prompt } from "stratus/core";
+import { prompt } from "stratus-sdk/core";
 
 const result = await prompt("What is 2 + 2?", { // [!code highlight]
   model,
@@ -180,7 +180,7 @@ const result = await run(agent, "Hello, world!");
 Pass a full message array when you need to prefill conversation history or include system messages:
 
 ```ts
-import type { ChatMessage } from "stratus/core";
+import type { ChatMessage } from "stratus-sdk/core";
 
 const messages: ChatMessage[] = [
   { role: "user", content: "My name is Alice." },
@@ -197,7 +197,7 @@ const result = await run(agent, messages);
 Use `ContentPart[]` inside a message to send images alongside text:
 
 ```ts
-import type { ChatMessage, ContentPart } from "stratus/core";
+import type { ChatMessage, ContentPart } from "stratus-sdk/core";
 
 const messages: ChatMessage[] = [
   {
@@ -220,7 +220,7 @@ const result = await run(agent, messages);
 `run()` and `stream()` are stateless -- they don't preserve messages between calls. For multi-turn conversations, use sessions:
 
 ```ts title="multi-turn.ts"
-import { createSession } from "stratus/core";
+import { createSession } from "stratus-sdk/core";
 
 await using session = createSession({
   model,

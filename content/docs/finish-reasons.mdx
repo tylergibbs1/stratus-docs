@@ -61,7 +61,7 @@ The `content_filter` finish reason is intercepted at the model layer before the 
 ### From `run()`
 
 ```ts title="run-finish-reason.ts"
-import { Agent, run } from "stratus/core";
+import { Agent, run } from "stratus-sdk/core";
 
 const agent = new Agent({ name: "assistant", model });
 const result = await run(agent, "What is the capital of France?");
@@ -73,7 +73,7 @@ console.log(result.output);       // "The capital of France is Paris."
 ### From `stream()`
 
 ```ts title="stream-finish-reason.ts"
-import { Agent, stream } from "stratus/core";
+import { Agent, stream } from "stratus-sdk/core";
 
 const agent = new Agent({ name: "writer", model });
 const { stream: s, result } = stream(agent, "Write a haiku");
@@ -95,7 +95,7 @@ console.log(finalResult.finishReason); // "stop" - from the last model call // [
 ### From a session
 
 ```ts title="session-finish-reason.ts"
-import { createSession } from "stratus/core";
+import { createSession } from "stratus-sdk/core";
 
 const session = createSession({ model, instructions: "You are a helpful assistant." });
 
@@ -154,7 +154,7 @@ if (result.finishReason === "length") {
 **Detect and retry** -- Check the finish reason and automatically retry with a higher limit.
 
 ```ts title="retry-on-truncation.ts"
-import { Agent, run } from "stratus/core";
+import { Agent, run } from "stratus-sdk/core";
 
 const agent = new Agent({ name: "writer", model });
 
@@ -177,7 +177,7 @@ console.log(result.output);
 During streaming, the finish reason is not available until the model finishes its response. It arrives in the final `done` event for each model call.
 
 ```ts title="streaming-finish-reason.ts"
-import { Agent, stream } from "stratus/core";
+import { Agent, stream } from "stratus-sdk/core";
 
 const agent = new Agent({ name: "assistant", model });
 const { stream: s, result } = stream(agent, "Tell me a story");

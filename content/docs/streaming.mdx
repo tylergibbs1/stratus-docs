@@ -38,7 +38,7 @@ for await (const event of session.stream()) {
 The lower-level `stream()` function returns both a stream and a result promise:
 
 ```ts title="stream.ts"
-import { Agent, stream } from "stratus/core";
+import { Agent, stream } from "stratus-sdk/core";
 
 const agent = new Agent({ name: "writer", model });
 const { stream: s, result } = stream(agent, "Write a haiku");
@@ -82,7 +82,7 @@ Pass an `AbortSignal` to cancel a running stream or `run()`. When aborted, a `Ru
 <Tab value="run()">
 
 ```ts title="abort-run.ts"
-import { RunAbortedError } from "stratus/core";
+import { RunAbortedError } from "stratus-sdk/core";
 
 const ac = new AbortController();
 setTimeout(() => ac.abort(), 5000); // Cancel after 5 seconds
@@ -148,7 +148,7 @@ The signal is threaded through to model API calls and tool `execute` functions, 
 If you don't need streaming, `run()` returns the complete result directly:
 
 ```ts
-import { Agent, run } from "stratus/core";
+import { Agent, run } from "stratus-sdk/core";
 
 const agent = new Agent({ name: "assistant", model });
 const result = await run(agent, "What is 2 + 2?");

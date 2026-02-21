@@ -21,7 +21,7 @@ The most common mistake is writing vague instructions that give the model too mu
 <Tab value="Bad">
 
 ```ts title="vague-instructions.ts"
-import { Agent } from "stratus/core";
+import { Agent } from "stratus-sdk/core";
 
 const agent = new Agent({
   name: "assistant",
@@ -36,7 +36,7 @@ This tells the model nothing specific. It will guess at tone, length, and format
 <Tab value="Good">
 
 ```ts title="clear-instructions.ts"
-import { Agent } from "stratus/core";
+import { Agent } from "stratus-sdk/core";
 
 const agent = new Agent({
   name: "assistant",
@@ -75,7 +75,7 @@ Assigning a persona through `instructions` focuses the model's behavior. The sam
 <Tab value="Without role">
 
 ```ts title="no-role.ts"
-import { Agent, run } from "stratus/core";
+import { Agent, run } from "stratus-sdk/core";
 
 const agent = new Agent({
   name: "writer",
@@ -92,7 +92,7 @@ console.log(result.output);
 <Tab value="With role">
 
 ```ts title="with-role.ts"
-import { Agent, run } from "stratus/core";
+import { Agent, run } from "stratus-sdk/core";
 
 const agent = new Agent({
   name: "copywriter",
@@ -122,7 +122,7 @@ Roles work because they activate relevant knowledge and writing patterns in the 
 When you need the model to follow a specific format, show it. Examples in your instructions (multishot prompting) are more reliable than descriptions of the format.
 
 ```ts title="multishot-instructions.ts"
-import { Agent } from "stratus/core";
+import { Agent } from "stratus-sdk/core";
 
 const agent = new Agent({
   name: "commit_message_writer",
@@ -160,7 +160,7 @@ Examples teach by demonstration. If you find yourself writing a paragraph explai
 When instructions get long, the model can blur the boundaries between sections. XML tags create clear separation between context, rules, examples, and data so the model parses each part correctly.
 
 ```ts title="xml-structured-instructions.ts"
-import { Agent } from "stratus/core";
+import { Agent } from "stratus-sdk/core";
 
 const agent = new Agent({
   name: "support",
@@ -207,7 +207,7 @@ XML tags are most useful for instructions over ~200 words. For short prompts, pl
 When your instructions need runtime data, pass a function instead of a string. The function receives the agent's context object and returns the instructions.
 
 ```ts title="dynamic-instructions.ts"
-import { Agent, run } from "stratus/core";
+import { Agent, run } from "stratus-sdk/core";
 
 interface AppContext {
   userName: string;
@@ -244,7 +244,7 @@ The instructions function runs before every model call in the run loop, so the s
 When your instructions depend on external data, use an async function. This is useful for fetching rules from a database, loading feature flags, or pulling in tenant-specific configuration.
 
 ```ts title="async-instructions.ts"
-import { Agent, run } from "stratus/core";
+import { Agent, run } from "stratus-sdk/core";
 
 interface TenantContext {
   tenantId: string;
@@ -287,7 +287,7 @@ Async instructions run on every model call in the loop, not just the first. Keep
 Instructions should tell the model about its tools: what each tool does, when to use it, and when not to. Reference tools by their exact `name` so there is no ambiguity.
 
 ```ts title="tool-aware-instructions.ts"
-import { Agent, tool } from "stratus/core";
+import { Agent, tool } from "stratus-sdk/core";
 import { z } from "zod";
 
 const searchKnowledgeBase = tool({
@@ -346,7 +346,7 @@ Three things to include when referencing tools in instructions:
 Triage agents need instructions that map intents to specialists. Be explicit about the routing logic. List each specialist by name and describe the triggers for each handoff.
 
 ```ts title="triage-instructions.ts"
-import { Agent } from "stratus/core";
+import { Agent } from "stratus-sdk/core";
 
 const billingAgent = new Agent({
   name: "billing_specialist",
@@ -407,7 +407,7 @@ Reference this table when writing instructions for specific behaviors:
 You can combine several patterns in a single instructions string:
 
 ```ts title="combined-patterns.ts"
-import { Agent } from "stratus/core";
+import { Agent } from "stratus-sdk/core";
 
 const agent = new Agent({
   name: "fact_checker",
@@ -428,7 +428,7 @@ const agent = new Agent({
 For reasoning models (o1, o3, etc.), `reasoningEffort` in `modelSettings` controls how much internal thinking the model does. This is a powerful tuning knob that can replace verbose "think step by step" instructions.
 
 ```ts title="reasoning-effort.ts"
-import { Agent } from "stratus/core";
+import { Agent } from "stratus-sdk/core";
 
 // Instead of "Think through the problem step by step" in instructions,
 // use reasoningEffort to control depth directly

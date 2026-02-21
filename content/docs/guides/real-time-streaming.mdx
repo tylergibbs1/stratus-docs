@@ -8,8 +8,8 @@ Users expect instant feedback. Streaming lets you display tokens as they arrive,
 ## Basic streaming
 
 ```ts title="basic-stream.ts"
-import { AzureResponsesModel } from "stratus";
-import { Agent, stream } from "stratus/core";
+import { AzureResponsesModel } from "stratus-sdk";
+import { Agent, stream } from "stratus-sdk/core";
 
 const model = new AzureResponsesModel({
   endpoint: process.env.AZURE_ENDPOINT!,
@@ -78,8 +78,8 @@ When an agent uses tools, streaming events come from multiple model calls. Strat
 When the model calls tools, stream events interleave tool and content events across multiple model rounds. Here is a full example with a weather tool:
 
 ```ts title="tool-stream.ts"
-import { AzureResponsesModel } from "stratus";
-import { Agent, stream, tool } from "stratus/core";
+import { AzureResponsesModel } from "stratus-sdk";
+import { Agent, stream, tool } from "stratus-sdk/core";
 import { z } from "zod";
 
 const model = new AzureResponsesModel({
@@ -147,8 +147,8 @@ done                                                          ← second model c
 This complete example builds a polished CLI that shows a spinner for tool calls and streams content with a typed effect:
 
 ```ts title="cli-stream.ts"
-import { AzureResponsesModel } from "stratus";
-import { Agent, stream, tool } from "stratus/core";
+import { AzureResponsesModel } from "stratus-sdk";
+import { Agent, stream, tool } from "stratus-sdk/core";
 import { z } from "zod";
 
 const model = new AzureResponsesModel({
@@ -228,8 +228,8 @@ Stream agent responses to a frontend over HTTP using Server-Sent Events. This ex
 ```ts title="sse-hono.ts"
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import { AzureResponsesModel } from "stratus";
-import { Agent, stream } from "stratus/core";
+import { AzureResponsesModel } from "stratus-sdk";
+import { Agent, stream } from "stratus-sdk/core";
 
 const model = new AzureResponsesModel({
   endpoint: process.env.AZURE_ENDPOINT!,
@@ -292,8 +292,8 @@ export default app;
 
 ```ts title="sse-express.ts"
 import express from "express";
-import { AzureResponsesModel } from "stratus";
-import { Agent, stream } from "stratus/core";
+import { AzureResponsesModel } from "stratus-sdk";
+import { Agent, stream } from "stratus-sdk/core";
 
 const model = new AzureResponsesModel({
   endpoint: process.env.AZURE_ENDPOINT!,
@@ -376,8 +376,8 @@ while (true) {
 Sessions combine multi-turn conversation history with streaming. Each `send()`/`stream()` cycle appends to the conversation, so the model sees everything from previous turns.
 
 ```ts title="session-stream.ts"
-import { AzureResponsesModel } from "stratus";
-import { createSession } from "stratus/core";
+import { AzureResponsesModel } from "stratus-sdk";
+import { createSession } from "stratus-sdk/core";
 
 const model = new AzureResponsesModel({
   endpoint: process.env.AZURE_ENDPOINT!,
@@ -421,8 +421,8 @@ console.log("Agent:", result.lastAgent.name);
 Pass an `AbortSignal` to cancel a stream mid-response. When aborted, the stream throws a `RunAbortedError`.
 
 ```ts title="abort-stream.ts"
-import { AzureResponsesModel } from "stratus";
-import { Agent, stream, RunAbortedError } from "stratus/core";
+import { AzureResponsesModel } from "stratus-sdk";
+import { Agent, stream, RunAbortedError } from "stratus-sdk/core";
 
 const model = new AzureResponsesModel({
   endpoint: process.env.AZURE_ENDPOINT!,
@@ -478,7 +478,7 @@ app.post("/chat", async (req, res) => {
 The `stream()` function returns `{ stream, result }`. The `result` is a `Promise<RunResult>` that resolves after you fully consume the stream.
 
 ```ts title="stream-result.ts"
-import { Agent, stream } from "stratus/core";
+import { Agent, stream } from "stratus-sdk/core";
 
 const agent = new Agent({ name: "assistant", model });
 const { stream: s, result } = stream(agent, "Summarize quantum computing");

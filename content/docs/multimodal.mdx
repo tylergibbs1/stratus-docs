@@ -10,8 +10,8 @@ Send text, images, or both to any agent using `ContentPart` arrays.
 Pass a `ChatMessage[]` array to `run()` with a `UserMessage` whose `content` is a `ContentPart[]`:
 
 ```ts title="image-input.ts"
-import { Agent, run } from "stratus/core";
-import type { ChatMessage } from "stratus/core";
+import { Agent, run } from "stratus-sdk/core";
+import type { ChatMessage } from "stratus-sdk/core";
 
 const agent = new Agent({
   name: "vision",
@@ -63,7 +63,7 @@ const result = await run(agent, messages);
 Combine text and image parts in a single message:
 
 ```ts title="mixed-content.ts"
-import type { ContentPart } from "stratus/core";
+import type { ContentPart } from "stratus-sdk/core";
 
 const parts: ContentPart[] = [
   { type: "text", text: "Compare these two charts and summarize the differences." },
@@ -111,8 +111,8 @@ Use `"low"` when you only need a general understanding of the image. It processe
 `session.send()` accepts a `ContentPart[]` directly:
 
 ```ts title="session-multimodal.ts"
-import { createSession } from "stratus/core";
-import type { ContentPart } from "stratus/core";
+import { createSession } from "stratus-sdk/core";
+import type { ContentPart } from "stratus-sdk/core";
 
 const session = createSession({
   model,
@@ -144,8 +144,8 @@ for await (const event of session.stream()) {
 `prompt()` also accepts `ContentPart[]` as input:
 
 ```ts title="prompt-multimodal.ts"
-import { prompt } from "stratus/core";
-import type { ContentPart } from "stratus/core";
+import { prompt } from "stratus-sdk/core";
+import type { ContentPart } from "stratus-sdk/core";
 
 const parts: ContentPart[] = [
   { type: "text", text: "Describe this image in one sentence." },

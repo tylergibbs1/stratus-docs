@@ -10,8 +10,8 @@ Guardrails validate agent input and output, allowing you to block harmful or inv
 Input guardrails run before the model is called. They check the user's message:
 
 ```ts title="input-guardrail.ts"
-import { Agent, run } from "stratus/core";
-import type { InputGuardrail } from "stratus/core";
+import { Agent, run } from "stratus-sdk/core";
+import type { InputGuardrail } from "stratus-sdk/core";
 
 const noPersonalInfo: InputGuardrail = {
   name: "no_personal_info",
@@ -33,7 +33,7 @@ const agent = new Agent({
 Output guardrails run after the model responds. They check the model's output:
 
 ```ts title="output-guardrail.ts"
-import type { OutputGuardrail } from "stratus/core";
+import type { OutputGuardrail } from "stratus-sdk/core";
 
 const noCodeInOutput: OutputGuardrail = {
   name: "no_code",
@@ -77,7 +77,7 @@ When a guardrail triggers, it throws an error that you can catch:
 import {
   InputGuardrailTripwireTriggered,
   OutputGuardrailTripwireTriggered,
-} from "stratus/core";
+} from "stratus-sdk/core";
 
 try {
   await run(agent, userInput);

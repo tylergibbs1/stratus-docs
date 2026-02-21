@@ -10,8 +10,8 @@ A slow agent drives users away, burns tokens, and blocks downstream systems. Thi
 The single biggest perceived-latency improvement is switching from `run()` to `stream()`. With `run()`, the user sees nothing until the entire response is generated. With `stream()`, tokens appear as soon as the model produces them.
 
 ```ts title="before-run.ts"
-import { Agent, run } from "stratus/core";
-import { AzureResponsesModel } from "stratus";
+import { Agent, run } from "stratus-sdk/core";
+import { AzureResponsesModel } from "stratus-sdk";
 
 const model = new AzureResponsesModel({ deployment: "gpt-5.2" });
 const agent = new Agent({ name: "assistant", model });
@@ -22,8 +22,8 @@ console.log(result.output);
 ```
 
 ```ts title="after-stream.ts"
-import { Agent, stream } from "stratus/core";
-import { AzureResponsesModel } from "stratus";
+import { Agent, stream } from "stratus-sdk/core";
+import { AzureResponsesModel } from "stratus-sdk";
 
 const model = new AzureResponsesModel({ deployment: "gpt-5.2" });
 const agent = new Agent({ name: "assistant", model });
@@ -52,7 +52,7 @@ For HTTP APIs, stream responses to the frontend using Server-Sent Events. See th
 Not every agent needs the most capable model. Azure offers multiple deployment tiers, and smaller models respond significantly faster.
 
 ```ts title="fast-model.ts"
-import { AzureResponsesModel } from "stratus";
+import { AzureResponsesModel } from "stratus-sdk";
 
 // Fast model for simple routing, classification, and extraction
 const fastModel = new AzureResponsesModel({ deployment: "gpt-4.1-mini" }); // [!code highlight]
@@ -64,7 +64,7 @@ const fullModel = new AzureResponsesModel({ deployment: "gpt-5.2" }); // [!code 
 Use the fast model for agents that do simple, well-defined tasks:
 
 ```ts title="tiered-agents.ts"
-import { Agent } from "stratus/core";
+import { Agent } from "stratus-sdk/core";
 
 // Router: classifies intent - fast model is fine
 const router = new Agent({
@@ -126,7 +126,7 @@ Tips for leaner instructions:
 Without `maxTokens`, the model generates until it finishes its thought or hits the deployment's limit. For tasks with predictable output length, capping tokens prevents runaway generation.
 
 ```ts title="max-tokens.ts"
-import { Agent } from "stratus/core";
+import { Agent } from "stratus-sdk/core";
 
 const summarizer = new Agent({
   name: "summarizer",
@@ -218,7 +218,7 @@ If you have explicitly set `parallelToolCalls: false`, consider re-enabling it f
 When an agent exists solely to call a tool and return its result, the default behavior wastes a model call. After the tool executes, the model is called again to summarize the result in natural language. With `stop_on_first_tool`, the run ends immediately after tool execution - no second model call.
 
 ```ts title="stop-on-first.ts"
-import { Agent, run, tool } from "stratus/core";
+import { Agent, run, tool } from "stratus-sdk/core";
 import { z } from "zod";
 
 const fetchOrder = tool({
@@ -256,7 +256,7 @@ Azure automatically caches prompt prefixes for requests over 1,024 tokens. Cache
 When many requests share long common prefixes, use `promptCacheKey` to improve cache hit rates:
 
 ```ts title="prompt-cache.ts"
-import { Agent } from "stratus/core";
+import { Agent } from "stratus-sdk/core";
 
 const agent = new Agent({
   name: "support",
@@ -287,7 +287,7 @@ Prompt caching requires at least 1,024 identical tokens at the start of the prom
 Use `AbortSignal.timeout()` to enforce a hard deadline on agent runs. If the model or a tool takes too long, the run throws `RunAbortedError` instead of hanging indefinitely.
 
 ```ts title="timeout.ts"
-import { Agent, run, RunAbortedError } from "stratus/core";
+import { Agent, run, RunAbortedError } from "stratus-sdk/core";
 
 const agent = new Agent({
   name: "researcher",
@@ -335,7 +335,7 @@ app.post("/chat", async (req, res) => {
 Guessing at bottlenecks wastes time. Wrap your agent calls in `withTrace()` to see exactly where time is spent - model calls vs. tool execution vs. guardrails.
 
 ```ts title="trace-latency.ts"
-import { withTrace, run, Agent, tool } from "stratus/core";
+import { withTrace, run, Agent, tool } from "stratus-sdk/core";
 import { z } from "zod";
 
 const agent = new Agent({

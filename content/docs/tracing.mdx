@@ -10,7 +10,7 @@ Stratus includes an opt-in tracing system that records spans for model calls, to
 Wrap your agent call with `withTrace()` to capture a trace:
 
 ```ts title="tracing.ts"
-import { withTrace, run, Agent } from "stratus/core";
+import { withTrace, run, Agent } from "stratus-sdk/core";
 
 const agent = new Agent({ name: "assistant", model, tools: [getWeather] });
 
@@ -66,7 +66,7 @@ interface Span {
 Access the current trace context to record your own spans:
 
 ```ts title="custom-span.ts"
-import { getCurrentTrace } from "stratus/core";
+import { getCurrentTrace } from "stratus-sdk/core";
 
 const myTool = tool({
   name: "search",

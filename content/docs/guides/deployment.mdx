@@ -35,8 +35,8 @@ Choose a pattern based on how your agents interact with users.
 Each HTTP request creates a fresh `run()` with no prior history. Best for one-off tasks like classification, extraction, or single-turn Q&A.
 
 ```ts title="ephemeral.ts"
-import { AzureResponsesModel } from "stratus";
-import { Agent, run } from "stratus/core";
+import { AzureResponsesModel } from "stratus-sdk";
+import { Agent, run } from "stratus-sdk/core";
 
 const model = new AzureResponsesModel({
   endpoint: process.env.AZURE_ENDPOINT!,
@@ -69,8 +69,8 @@ async function handleRequest(message: string) {
 Use `createSession()` for multi-turn conversations where the process stays alive. Best for chat applications, interactive assistants, and WebSocket servers.
 
 ```ts title="persistent.ts"
-import { AzureResponsesModel } from "stratus";
-import { createSession } from "stratus/core";
+import { AzureResponsesModel } from "stratus-sdk";
+import { createSession } from "stratus-sdk/core";
 
 const model = new AzureResponsesModel({
   endpoint: process.env.AZURE_ENDPOINT!,
@@ -120,9 +120,9 @@ async function handleMessage(userId: string, message: string) {
 Use `save()` and `resumeSession()` to persist conversations across process restarts, deployments, or server instances. Best for workflows that span multiple sessions or need durability.
 
 ```ts title="hybrid.ts"
-import { AzureResponsesModel } from "stratus";
-import { createSession, resumeSession } from "stratus/core";
-import type { SessionSnapshot } from "stratus/core";
+import { AzureResponsesModel } from "stratus-sdk";
+import { createSession, resumeSession } from "stratus-sdk/core";
+import type { SessionSnapshot } from "stratus-sdk/core";
 
 const model = new AzureResponsesModel({
   endpoint: process.env.AZURE_ENDPOINT!,
@@ -189,8 +189,8 @@ Wrap a Stratus agent in an HTTP endpoint that streams responses as Server-Sent E
 ```ts title="server.ts"
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import { AzureResponsesModel } from "stratus";
-import { Agent, stream, RunAbortedError } from "stratus/core";
+import { AzureResponsesModel } from "stratus-sdk";
+import { Agent, stream, RunAbortedError } from "stratus-sdk/core";
 
 const model = new AzureResponsesModel({
   endpoint: process.env.AZURE_ENDPOINT!,
@@ -271,8 +271,8 @@ export default app;
 
 ```ts title="server.ts"
 import express from "express";
-import { AzureResponsesModel } from "stratus";
-import { Agent, stream, RunAbortedError } from "stratus/core";
+import { AzureResponsesModel } from "stratus-sdk";
+import { Agent, stream, RunAbortedError } from "stratus-sdk/core";
 
 const model = new AzureResponsesModel({
   endpoint: process.env.AZURE_ENDPOINT!,
@@ -395,7 +395,7 @@ An agent with tools can loop indefinitely if the model keeps calling tools witho
 Set `maxTurns` to cap the number of model calls in a single run. When exceeded, Stratus throws `MaxTurnsExceededError`.
 
 ```ts title="max-turns.ts"
-import { Agent, run, MaxTurnsExceededError } from "stratus/core";
+import { Agent, run, MaxTurnsExceededError } from "stratus-sdk/core";
 
 const agent = new Agent({
   name: "researcher",
@@ -424,7 +424,7 @@ The default `maxTurns` is 10. For production, set it explicitly based on your ag
 Use `AbortSignal.timeout()` to enforce a wall-clock deadline. This catches cases where individual model calls are slow, not just where the agent loops too many times.
 
 ```ts title="timeout.ts"
-import { Agent, run, RunAbortedError } from "stratus/core";
+import { Agent, run, RunAbortedError } from "stratus-sdk/core";
 
 try {
   const result = await run(agent, "Summarize this dataset", {
@@ -444,7 +444,7 @@ try {
 Use both together for defense in depth:
 
 ```ts title="combined-safety.ts"
-import { Agent, run, MaxTurnsExceededError, RunAbortedError } from "stratus/core";
+import { Agent, run, MaxTurnsExceededError, RunAbortedError } from "stratus-sdk/core";
 
 async function safeRun(agent: Agent, input: string) {
   try {
@@ -471,7 +471,7 @@ async function safeRun(agent: Agent, input: string) {
 Wrap agent runs with `withTrace()` to capture span-level timing for every model call, tool execution, handoff, and guardrail check:
 
 ```ts title="traced-endpoint.ts"
-import { withTrace, Agent, run } from "stratus/core";
+import { withTrace, Agent, run } from "stratus-sdk/core";
 
 app.post("/chat", async (req, res) => {
   const { result, trace } = await withTrace("chat_request", async () => { // [!code highlight]
@@ -509,7 +509,7 @@ Each trace includes spans for:
 Every `RunResult` includes accumulated token usage. Log it to track costs per request:
 
 ```ts title="usage-logging.ts"
-import type { UsageInfo } from "stratus/core";
+import type { UsageInfo } from "stratus-sdk/core";
 
 function logUsage(requestId: string, usage: UsageInfo) {
   console.log(JSON.stringify({
@@ -535,7 +535,7 @@ logUsage(requestId, result.usage); // [!code highlight]
 Use `createCostEstimator()` and pass it to `run()` or `createSession()` for automatic per-run cost tracking:
 
 ```ts title="cost-tracking.ts"
-import { Agent, run, createCostEstimator } from "stratus/core";
+import { Agent, run, createCostEstimator } from "stratus-sdk/core";
 
 const estimator = createCostEstimator({ // [!code highlight]
   inputTokenCostPer1k: 0.005,
@@ -556,7 +556,7 @@ console.log(`Turns: ${result.numTurns}`);
 Set `maxBudgetUsd` to automatically stop runs that exceed a dollar threshold. The `onStop` hook fires with `reason: "max_budget"` before `MaxBudgetExceededError` is thrown.
 
 ```ts title="budget-limits.ts"
-import { Agent, run, createCostEstimator, MaxBudgetExceededError } from "stratus/core";
+import { Agent, run, createCostEstimator, MaxBudgetExceededError } from "stratus-sdk/core";
 
 const estimator = createCostEstimator({
   inputTokenCostPer1k: 0.005,
@@ -611,8 +611,8 @@ The budget is checked after each model call. A single model call may push spendi
 Block harmful or invalid input before it reaches the model. Guardrails run in parallel with the first model call, so they add minimal latency:
 
 ```ts title="production-guardrails.ts"
-import { Agent } from "stratus/core";
-import type { InputGuardrail } from "stratus/core";
+import { Agent } from "stratus-sdk/core";
+import type { InputGuardrail } from "stratus-sdk/core";
 
 const piiGuardrail: InputGuardrail = {
   name: "block_pii",
@@ -652,7 +652,7 @@ const agent = new Agent({
 Catch guardrail errors in your request handler:
 
 ```ts title="guardrail-handling.ts"
-import { run, InputGuardrailTripwireTriggered } from "stratus/core";
+import { run, InputGuardrailTripwireTriggered } from "stratus-sdk/core";
 
 try {
   const result = await run(agent, userInput);
@@ -672,7 +672,7 @@ try {
 Use `beforeToolCall` to enforce authorization rules. The model sees denials as tool results and adapts its response:
 
 ```ts title="permission-hooks.ts"
-import { Agent } from "stratus/core";
+import { Agent } from "stratus-sdk/core";
 
 interface AppContext {
   userId: string;
@@ -719,7 +719,7 @@ Hook decisions support three modes: `"allow"` (default), `"deny"` (block with re
 Validate model output before returning it to users. Output guardrails run after the model responds and can block sensitive data from leaking:
 
 ```ts title="output-guardrails.ts"
-import type { OutputGuardrail } from "stratus/core";
+import type { OutputGuardrail } from "stratus-sdk/core";
 
 const noInternalData: OutputGuardrail = {
   name: "no_internal_data",

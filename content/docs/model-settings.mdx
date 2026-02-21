@@ -10,7 +10,7 @@ Model settings control how the model generates responses. You set them on the ag
 Pass a `modelSettings` object when creating an agent:
 
 ```ts title="agent-settings.ts"
-import { Agent } from "stratus/core";
+import { Agent } from "stratus-sdk/core";
 
 const agent = new Agent({
   name: "assistant",
@@ -54,7 +54,7 @@ For reasoning models (o1, o3, etc.), use `reasoningEffort` and `maxCompletionTok
 `reasoningEffort` controls how much internal reasoning the model does before responding. Higher effort produces more thorough answers but uses more tokens and takes longer.
 
 ```ts title="reasoning-settings.ts"
-import { Agent } from "stratus/core";
+import { Agent } from "stratus-sdk/core";
 
 const agent = new Agent({
   name: "analyst",

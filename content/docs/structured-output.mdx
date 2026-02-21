@@ -9,7 +9,7 @@ Structured output lets you constrain the model to respond with JSON matching a Z
 
 ```ts title="structured.ts"
 import { z } from "zod";
-import { Agent, run } from "stratus/core";
+import { Agent, run } from "stratus-sdk/core";
 
 const schema = z.object({
   name: z.string(),
@@ -99,7 +99,7 @@ On completion, Stratus parses the raw JSON output with the Zod schema. The typed
 If the model output can't be parsed, an `OutputParseError` is thrown:
 
 ```ts title="error-handling.ts"
-import { OutputParseError } from "stratus/core";
+import { OutputParseError } from "stratus-sdk/core";
 
 try {
   const result = await run(agent, input);

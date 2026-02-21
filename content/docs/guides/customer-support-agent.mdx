@@ -10,8 +10,8 @@ Route customer requests to specialized agents with tools, audit every handoff wi
 Here is a minimal working example. A triage agent routes to an order specialist and a refund specialist:
 
 ```ts title="quick-start.ts"
-import { Agent, run } from "stratus/core";
-import { AzureResponsesModel } from "stratus";
+import { Agent, run } from "stratus-sdk/core";
+import { AzureResponsesModel } from "stratus-sdk";
 
 const model = new AzureResponsesModel({ deployment: "gpt-5.2" });
 
@@ -63,7 +63,7 @@ User -> Triage Agent -> Order Agent (tools: lookupOrder, trackShipment)
 Give the order specialist a tool to fetch order details from your database:
 
 ```ts title="tools.ts"
-import { tool } from "stratus/core";
+import { tool } from "stratus-sdk/core";
 import { z } from "zod";
 
 const lookupOrder = tool({
@@ -121,7 +121,7 @@ const checkEligibility = tool({
 Each specialist gets its own tools and a `handoffDescription` that tells the triage agent when to route to it:
 
 ```ts title="agents.ts"
-import { Agent } from "stratus/core";
+import { Agent } from "stratus-sdk/core";
 
 const orderAgent = new Agent<AppContext>({
   name: "order_specialist",
@@ -151,8 +151,8 @@ The `handoffDescription` is injected into the triage agent's tool definitions. W
 Hooks let you observe and control the agent lifecycle. Here, `beforeHandoff` logs every transfer to an audit table and `afterRun` records the resolution:
 
 ```ts title="triage.ts"
-import { Agent, run } from "stratus/core";
-import type { ToolCallDecision } from "stratus/core";
+import { Agent, run } from "stratus-sdk/core";
+import type { ToolCallDecision } from "stratus-sdk/core";
 
 const triageAgent = new Agent<AppContext>({
   name: "triage",
@@ -195,7 +195,7 @@ Hooks run inline in the agent loop. Keep them fast -- offload heavy work (analyt
 Guardrails run in parallel with the first model call and trip a wire if the input is problematic. Add a toxicity check to reject abusive messages before they reach any agent:
 
 ```ts title="guardrails.ts"
-import type { InputGuardrail } from "stratus/core";
+import type { InputGuardrail } from "stratus-sdk/core";
 
 const toxicityGuard: InputGuardrail<AppContext> = {
   name: "toxicity_check",
@@ -220,7 +220,7 @@ Input guardrails only run on the _entry_ agent. After a handoff, the specialist 
 Wrap everything in a session for multi-turn conversations. The session maintains message history and context across turns:
 
 ```ts title="main.ts"
-import { createSession } from "stratus/core";
+import { createSession } from "stratus-sdk/core";
 
 const session = createSession<AppContext>({
   model,

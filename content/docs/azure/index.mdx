@@ -15,7 +15,7 @@ Stratus includes two built-in Azure OpenAI model implementations. Both implement
 The recommended model for new projects. Uses the Azure Responses API.
 
 ```ts title="responses.ts"
-import { AzureResponsesModel } from "stratus/azure";
+import { AzureResponsesModel } from "stratus-sdk/azure";
 
 const model = new AzureResponsesModel({
   endpoint: "https://your-resource.openai.azure.com",
@@ -39,7 +39,7 @@ const model = new AzureResponsesModel({
 Uses the Azure Chat Completions API. Use this if your deployment doesn't support the Responses API.
 
 ```ts title="chat-completions.ts"
-import { AzureChatCompletionsModel } from "stratus/azure";
+import { AzureChatCompletionsModel } from "stratus-sdk/azure";
 
 const model = new AzureChatCompletionsModel({
   endpoint: "https://your-resource.openai.azure.com",
@@ -81,6 +81,35 @@ endpoint: "https://your-resource.openai.azure.com/openai/deployments/gpt-5.2/cha
 ```
 
 Trailing slashes are normalized automatically.
+
+## Non-OpenAI Models (Model Inference API)
+
+`AzureChatCompletionsModel` works with any model deployed through the Azure AI Model Inference API, not just OpenAI models. Pass the full Model Inference URL as the endpoint and the model name as the deployment:
+
+```ts title="model-inference.ts"
+import { AzureChatCompletionsModel } from "stratus-sdk/azure";
+
+const model = new AzureChatCompletionsModel({
+  endpoint: "https://your-resource.services.ai.azure.com/models/chat/completions?api-version=2024-05-01-preview",
+  apiKey: "your-api-key",
+  deployment: "Kimi-K2.5", // model name sent in request body
+});
+```
+
+The `deployment` value is sent as the `model` field in the request body, which the Model Inference API uses to route to the correct model. All Stratus features (tools, streaming, handoffs, sessions, etc.) work with any model that supports the Chat Completions format.
+
+<Callout type="info">
+Not all models support every feature. For example, some models don't support tool calling or structured output. The SDK will surface the API error if an unsupported feature is used.
+</Callout>
+
+### Tested Models
+
+The following non-OpenAI models have been verified with `AzureChatCompletionsModel`:
+
+| Model | Tools | Structured Output | Streaming | Handoffs |
+| --- | --- | --- | --- | --- |
+| Kimi-K2.5 | Yes | Yes | Yes | Yes |
+| Kimi-K2-Thinking | Yes | Yes | Yes | Yes |
 
 ## Usage
 
@@ -187,7 +216,7 @@ Both models throw the same errors for failure modes:
 - **`ContentFilterError`** - Azure content filter blocked the request or response
 
 ```ts title="error-handling.ts"
-import { ModelError, ContentFilterError } from "stratus/core";
+import { ModelError, ContentFilterError } from "stratus-sdk/core";
 
 try {
   const result = await run(agent, input);

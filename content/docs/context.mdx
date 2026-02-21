@@ -10,8 +10,8 @@ Context passes shared state -- database connections, API clients, user info -- t
 Define an interface for your context, then pass it to `Agent<TContext>` and provide the value via `run()`:
 
 ```ts title="context.ts"
-import { AzureResponsesModel } from "stratus";
-import { Agent, run } from "stratus/core";
+import { AzureResponsesModel } from "stratus-sdk";
+import { Agent, run } from "stratus-sdk/core";
 
 interface AppContext {
   userId: string; // [!code highlight]
@@ -44,7 +44,7 @@ The generic parameter `Agent<AppContext>` flows through the entire system. TypeS
 The `execute` function receives context as its first argument:
 
 ```ts title="context-tool.ts"
-import { tool } from "stratus/core";
+import { tool } from "stratus-sdk/core";
 import { z } from "zod";
 
 interface AppContext {
@@ -120,7 +120,7 @@ See [Hooks](/hooks) for the full set of lifecycle callbacks.
 Guardrails receive context as their second argument. Use it for user-specific validation:
 
 ```ts title="context-guardrail.ts"
-import type { InputGuardrail } from "stratus/core";
+import type { InputGuardrail } from "stratus-sdk/core";
 
 interface AppContext {
   userId: string;
@@ -149,7 +149,7 @@ See [Guardrails](/guardrails) for input and output validation details.
 Pass context via `createSession()`. It flows to every `stream()` call for the lifetime of the session:
 
 ```ts title="session-context.ts"
-import { createSession } from "stratus/core";
+import { createSession } from "stratus-sdk/core";
 
 const session = createSession<AppContext>({
   model,
@@ -205,7 +205,7 @@ await run(triageAgent, "I want a refund", {
 The `onHandoff` callback also receives context:
 
 ```ts
-import { handoff } from "stratus/core";
+import { handoff } from "stratus-sdk/core";
 
 handoff({
   agent: refundAgent,

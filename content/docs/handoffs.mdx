@@ -10,7 +10,7 @@ Handoffs let one agent transfer a conversation to another agent mid-turn. This e
 Pass agents directly to `handoffs`. Stratus auto-generates a tool named `transfer_to_{agent_name}`:
 
 ```ts title="handoff.ts"
-import { Agent, run } from "stratus/core";
+import { Agent, run } from "stratus-sdk/core";
 
 const mathAgent = new Agent({
   name: "math",
@@ -34,7 +34,7 @@ console.log(result.lastAgent.name); // "math"
 Use the `handoff()` function for more control:
 
 ```ts title="custom-handoff.ts"
-import { handoff } from "stratus/core";
+import { handoff } from "stratus-sdk/core";
 
 const agent = new Agent({
   name: "triage",

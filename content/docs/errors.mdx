@@ -24,7 +24,7 @@ StratusError
 Base class for all Stratus errors.
 
 ```ts
-import { StratusError } from "stratus/core";
+import { StratusError } from "stratus-sdk/core";
 
 try {
   await run(agent, input);
@@ -40,7 +40,7 @@ try {
 Thrown when the agent loop exceeds `maxTurns` without producing a final response.
 
 ```ts
-import { MaxTurnsExceededError } from "stratus/core";
+import { MaxTurnsExceededError } from "stratus-sdk/core";
 
 try {
   await run(agent, input, { maxTurns: 3 });
@@ -56,7 +56,7 @@ try {
 Thrown when the estimated cost of a run exceeds `maxBudgetUsd`. Requires a `costEstimator` in options. The `onStop` hook fires before this error is thrown.
 
 ```ts
-import { MaxBudgetExceededError, createCostEstimator } from "stratus/core";
+import { MaxBudgetExceededError, createCostEstimator } from "stratus-sdk/core";
 
 const estimator = createCostEstimator({
   inputTokenCostPer1k: 0.005,
@@ -84,7 +84,7 @@ Properties:
 Thrown when a run is cancelled via an `AbortSignal`. See [Streaming - Abort Signal](/streaming#abort-signal).
 
 ```ts
-import { RunAbortedError } from "stratus/core";
+import { RunAbortedError } from "stratus-sdk/core";
 
 const ac = new AbortController();
 setTimeout(() => ac.abort(), 5000);
@@ -107,7 +107,7 @@ Pre-aborted signals throw `RunAbortedError` immediately without making any API c
 Thrown when the model API returns an error. Includes optional `status` and `code` fields:
 
 ```ts
-import { ModelError } from "stratus/core";
+import { ModelError } from "stratus-sdk/core";
 
 try {
   await run(agent, input);
@@ -123,7 +123,7 @@ try {
 A subclass of `ModelError` thrown when Azure's content filter blocks a request or response.
 
 ```ts
-import { ContentFilterError } from "stratus/core";
+import { ContentFilterError } from "stratus-sdk/core";
 
 try {
   await run(agent, input);

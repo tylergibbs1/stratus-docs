@@ -10,7 +10,7 @@ Pass an `AbortSignal` to cancel a run at any point. The signal propagates to mod
 Create an `AbortController`, pass its signal to `run()`, and call `abort()` when you want to cancel. The run throws a `RunAbortedError` that you can catch and handle.
 
 ```ts title="basic-abort.ts"
-import { Agent, run, RunAbortedError } from "stratus/core";
+import { Agent, run, RunAbortedError } from "stratus-sdk/core";
 
 const agent = new Agent({ name: "writer", model });
 const ac = new AbortController();
@@ -35,7 +35,7 @@ try {
 Use `AbortSignal.timeout()` to automatically cancel a run after a fixed duration. No `AbortController` needed.
 
 ```ts title="timeout.ts"
-import { Agent, run, RunAbortedError } from "stratus/core";
+import { Agent, run, RunAbortedError } from "stratus-sdk/core";
 
 const agent = new Agent({ name: "researcher", model });
 
@@ -56,7 +56,7 @@ try {
 In an HTTP server, abort the run when the client disconnects. This prevents wasted compute on abandoned requests.
 
 ```ts title="server-abort.ts"
-import { Agent, run, RunAbortedError } from "stratus/core";
+import { Agent, run, RunAbortedError } from "stratus-sdk/core";
 import { createServer } from "node:http";
 
 const agent = new Agent({ name: "assistant", model });
@@ -87,7 +87,7 @@ createServer(async (req, res) => {
 When a run is started with a signal, it is passed to each tool's `execute` function via the `options` parameter. Forward it to any async operations so they cancel promptly.
 
 ```ts title="signal-in-tool.ts"
-import { tool } from "stratus/core";
+import { tool } from "stratus-sdk/core";
 import { z } from "zod";
 
 const searchDocs = tool({
@@ -110,7 +110,7 @@ Any `fetch`, database query, or child process that accepts an `AbortSignal` can 
 Pass the signal through `stream()` the same way. Both the stream generator and the result promise reject with `RunAbortedError`.
 
 ```ts title="stream-abort.ts"
-import { Agent, stream, RunAbortedError } from "stratus/core";
+import { Agent, stream, RunAbortedError } from "stratus-sdk/core";
 
 const agent = new Agent({ name: "writer", model });
 const ac = new AbortController();
@@ -141,7 +141,7 @@ try {
 Pass the signal to `session.stream()`. The signal is per-invocation, not per-session - you can abort one turn and continue using the session for subsequent turns.
 
 ```ts title="session-abort.ts"
-import { createSession, RunAbortedError } from "stratus/core";
+import { createSession, RunAbortedError } from "stratus-sdk/core";
 
 const session = createSession({ model, instructions: "You are a helpful assistant." });
 const ac = new AbortController();
@@ -166,7 +166,7 @@ try {
 `RunAbortedError` extends `StratusError`. It is thrown whenever a signal is aborted - whether before the run starts or mid-execution.
 
 ```ts title="error-handling.ts"
-import { RunAbortedError, StratusError } from "stratus/core";
+import { RunAbortedError, StratusError } from "stratus-sdk/core";
 
 try {
   await run(agent, input, { signal });

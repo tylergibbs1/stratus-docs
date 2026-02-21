@@ -61,8 +61,8 @@ The OpenAI SDK gives you `chat.completions.create()`. Everything else is on you:
 ## Quick Example
 
 ```ts title="weather-agent.ts"
-import { AzureResponsesModel } from "stratus";
-import { createSession, tool } from "stratus/core";
+import { AzureResponsesModel } from "stratus-sdk";
+import { createSession, tool } from "stratus-sdk/core";
 import { z } from "zod";
 
 const model = new AzureResponsesModel({

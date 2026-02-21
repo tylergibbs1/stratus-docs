@@ -1,0 +1,149 @@
+---
+title: Todo Tracking
+description: Track and display task progress during agent execution
+---
+
+Todo tracking provides a structured way to manage tasks and display progress to users. The agent manages its own todo list via a tool call, and your application observes changes through a listener.
+
+## Basic Usage
+
+Create a `TodoList`, attach it to an agent via `todoTool()`, and listen for updates:
+
+```ts title="todo-basic.ts"
+import { Agent, run, todoTool, TodoList } from "stratus-sdk/core";
+
+const todos = new TodoList();
+
+todos.onUpdate((items) => {
+  for (const item of items) {
+    const icon = item.status === "completed" ? "+" :
+      item.status === "in_progress" ? ">" : "-";
+    const text = item.status === "in_progress" && item.activeForm
+      ? item.activeForm : item.content;
+    console.log(`  ${icon} ${text}`);
+  }
+});
+
+const agent = new Agent({
+  name: "planner",
+  instructions: "Break tasks into steps and track progress using todo_write.",
+  model,
+  tools: [todoTool(todos)],
+});
+
+await run(agent, "Set up a new TypeScript project with tests");
+```
+
+The agent will call `todo_write` to create and update todos as it works. Each call sends the complete list, making updates idempotent.
+
+## Todo Structure
+
+Each todo has the following fields:
+
+```ts
+interface Todo {
+  id: string;         // Unique identifier
+  content: string;    // Task description
+  status: TodoStatus; // "pending" | "in_progress" | "completed"
+  activeForm?: string; // Present continuous form (e.g. "Installing dependencies")
+}
+```
+
+The `activeForm` field is used when `status` is `"in_progress"` to describe the current action in present continuous tense (e.g. "Running tests" instead of "Run tests").
+
+## Streaming
+
+Todo updates work with streaming. The `onUpdate` listener fires as soon as the agent's `todo_write` tool call is executed, even mid-stream:
+
+```ts title="todo-streaming.ts"
+import { Agent, stream, todoTool, TodoList } from "stratus-sdk/core";
+
+const todos = new TodoList();
+todos.onUpdate((items) => {
+  const done = items.filter((t) => t.status === "completed").length;
+  console.log(`Progress: ${done}/${items.length}`);
+});
+
+const agent = new Agent({
+  name: "worker",
+  instructions: "Track your progress with todo_write.",
+  model,
+  tools: [todoTool(todos)],
+});
+
+const { stream: s, result } = stream(agent, "Build a REST API");
+
+for await (const event of s) {
+  if (event.type === "content_delta") {
+    process.stdout.write(event.content);
+  }
+}
+```
+
+## TodoList API
+
+### `onUpdate(listener)`
+
+Register a callback that fires whenever the todo list changes. Returns an unsubscribe function.
+
+```ts
+const unsubscribe = todos.onUpdate((items) => {
+  // items is readonly Todo[]
+});
+
+// Later: stop listening
+unsubscribe();
+```
+
+### `todos`
+
+Read-only snapshot of the current todo list.
+
+```ts
+console.log(todos.todos); // readonly Todo[]
+```
+
+### `clear()`
+
+Reset the todo list and notify listeners.
+
+```ts
+todos.clear();
+```
+
+## How It Works
+
+`todoTool()` creates a standard `FunctionTool` named `todo_write`. The agent sends the full todo list state with each call. The tool:
+
+1. Replaces the `TodoList` state with the new list
+2. Fires all registered `onUpdate` listeners
+3. Returns a summary string to the agent (e.g. "2/4 completed, 1 in progress")
+
+Because the agent sends the complete list each time, there's no risk of state drift between the agent and your application.
+
+## Sessions
+
+Todo tracking works with sessions. Create a separate `TodoList` per session:
+
+```ts title="todo-sessions.ts"
+import { createSession, todoTool, TodoList } from "stratus-sdk/core";
+
+const todos = new TodoList();
+const session = createSession({
+  model,
+  tools: [todoTool(todos)],
+  instructions: "Track progress with todo_write.",
+});
+
+session.send("Plan a deployment strategy");
+for await (const event of session.stream()) {
+  // stream events
+}
+
+console.log(todos.todos); // current state after first turn
+
+session.send("Now execute the plan");
+for await (const event of session.stream()) {
+  // agent updates existing todos
+}
+```

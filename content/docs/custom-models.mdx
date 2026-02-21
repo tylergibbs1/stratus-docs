@@ -14,7 +14,7 @@ import type {
   ModelRequestOptions,
   ModelResponse,
   StreamEvent,
-} from "stratus/core";
+} from "stratus-sdk/core";
 ```
 
 The `Model` interface requires two methods:
@@ -46,7 +46,7 @@ import type {
   ModelRequestOptions,
   ModelResponse,
   StreamEvent,
-} from "stratus/core";
+} from "stratus-sdk/core";
 
 export class EchoModel implements Model {
   async getResponse(
@@ -148,8 +148,8 @@ import type {
   ModelResponse,
   StreamEvent,
   UsageInfo,
-} from "stratus/core";
-import type { ToolCall } from "stratus/core";
+} from "stratus-sdk/core";
+import type { ToolCall } from "stratus-sdk/core";
 
 interface OpenAIModelConfig {
   apiKey: string;
@@ -288,7 +288,7 @@ Custom models are passed anywhere the SDK accepts a `Model`. There is no registr
 ### With an Agent and run()
 
 ```ts title="custom-run.ts"
-import { Agent, run } from "stratus/core";
+import { Agent, run } from "stratus-sdk/core";
 
 const model = new OpenAIModel({
   apiKey: process.env.OPENAI_API_KEY!,
@@ -308,7 +308,7 @@ console.log(result.output);
 ### With stream()
 
 ```ts title="custom-stream.ts"
-import { Agent, stream } from "stratus/core";
+import { Agent, stream } from "stratus-sdk/core";
 
 const { stream: events, result } = await stream(
   agent,
@@ -328,7 +328,7 @@ console.log(final.usage);
 ### With sessions
 
 ```ts title="custom-session.ts"
-import { createSession } from "stratus/core";
+import { createSession } from "stratus-sdk/core";
 
 const session = createSession({
   model,

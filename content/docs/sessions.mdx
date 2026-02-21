@@ -8,7 +8,7 @@ Sessions provide a high-level API for multi-turn conversations. Messages persist
 ## Creating a Session
 
 ```ts title="session.ts"
-import { createSession } from "stratus/core";
+import { createSession } from "stratus-sdk/core";
 
 const session = createSession({
   model,
@@ -72,7 +72,7 @@ for await (const event of session.stream()) {
 `send()` accepts either a string or a `ContentPart[]` array for multimodal input:
 
 ```ts title="multimodal.ts"
-import type { ContentPart } from "stratus/core";
+import type { ContentPart } from "stratus-sdk/core";
 
 const parts: ContentPart[] = [
   { type: "text", text: "What is in this image?" },
@@ -148,7 +148,7 @@ const snapshot = session.save();
 Resume a session with the same ID and conversation history:
 
 ```ts title="resume.ts"
-import { resumeSession } from "stratus/core";
+import { resumeSession } from "stratus-sdk/core";
 
 const session2 = resumeSession(snapshot, {
   model,
@@ -166,7 +166,7 @@ for await (const event of session2.stream()) { /* ... */ }
 Fork creates a new session (new ID) with a copy of the conversation history:
 
 ```ts title="fork.ts"
-import { forkSession } from "stratus/core";
+import { forkSession } from "stratus-sdk/core";
 
 const forked = forkSession(snapshot, {
   model,
@@ -186,7 +186,7 @@ for await (const event of forked.stream()) { /* ... */ }
 Pass an `AbortSignal` to `stream()` to cancel a running turn:
 
 ```ts title="abort.ts"
-import { RunAbortedError } from "stratus/core";
+import { RunAbortedError } from "stratus-sdk/core";
 
 const ac = new AbortController();
 
@@ -234,7 +234,7 @@ session.close();
 For single-turn use cases, `prompt()` is a convenience that creates a session, sends a message, drains the stream, and returns the result:
 
 ```ts
-import { prompt } from "stratus/core";
+import { prompt } from "stratus-sdk/core";
 
 const result = await prompt("What is 2 + 2?", { model });
 console.log(result.output); // "4"

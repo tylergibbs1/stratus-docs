@@ -56,8 +56,8 @@ Stratus handles this entire loop automatically. You define tools and call `run()
 Define a tool with `tool()`, attach it to an agent, and call `run()`. The model decides when to call the tool and what to do with the result.
 
 ```ts title="quick-start.ts"
-import { AzureResponsesModel } from "stratus";
-import { Agent, run, tool } from "stratus/core";
+import { AzureResponsesModel } from "stratus-sdk";
+import { Agent, run, tool } from "stratus-sdk/core";
 import { z } from "zod";
 
 const model = new AzureResponsesModel({
@@ -100,8 +100,8 @@ Behind the scenes, `run()` made two model calls: one that triggered `get_weather
 When the model needs information from multiple sources, it can call several tools at once. Stratus executes them in parallel and sends all results back in one batch.
 
 ```ts title="parallel-tools.ts"
-import { AzureResponsesModel } from "stratus";
-import { Agent, run, tool } from "stratus/core";
+import { AzureResponsesModel } from "stratus-sdk";
+import { Agent, run, tool } from "stratus-sdk/core";
 import { z } from "zod";
 
 const model = new AzureResponsesModel({
@@ -150,8 +150,8 @@ Parallel tool calls are a model behavior, not something you configure. The model
 Most real agents have multiple tools. The model picks the right tool based on the user's request. You don't need routing logic.
 
 ```ts title="multi-tool.ts"
-import { AzureResponsesModel } from "stratus";
-import { Agent, run, tool } from "stratus/core";
+import { AzureResponsesModel } from "stratus-sdk";
+import { Agent, run, tool } from "stratus-sdk/core";
 import { z } from "zod";
 
 const model = new AzureResponsesModel({
@@ -371,8 +371,8 @@ When `toolUseBehavior` stops early, `result.output` contains the raw tool output
 When a tool's `execute` function throws, Stratus catches the error and sends the error message back to the model as the tool result. The model sees the error and can adjust - retry with different parameters, try a different tool, or respond to the user with an explanation.
 
 ```ts title="error-recovery.ts"
-import { AzureResponsesModel } from "stratus";
-import { Agent, run, tool } from "stratus/core";
+import { AzureResponsesModel } from "stratus-sdk";
+import { Agent, run, tool } from "stratus-sdk/core";
 import { z } from "zod";
 
 const model = new AzureResponsesModel({
@@ -422,8 +422,8 @@ Tool errors never crash the run. They flow back to the model as information. Onl
 When you use `stream()`, you receive real-time events during the entire tool loop - including tool call events between model turns.
 
 ```ts title="stream-tools.ts"
-import { AzureResponsesModel } from "stratus";
-import { Agent, stream, tool } from "stratus/core";
+import { AzureResponsesModel } from "stratus-sdk";
+import { Agent, stream, tool } from "stratus-sdk/core";
 import { z } from "zod";
 
 const model = new AzureResponsesModel({
@@ -493,8 +493,8 @@ You see multiple `done` events in a multi-turn run - one per model call.
 Pass shared resources like database clients, API keys, or user info through the `context` object. This keeps tools pure and testable.
 
 ```ts title="context-tools.ts"
-import { AzureResponsesModel } from "stratus";
-import { Agent, run, tool } from "stratus/core";
+import { AzureResponsesModel } from "stratus-sdk";
+import { Agent, run, tool } from "stratus-sdk/core";
 import { z } from "zod";
 
 interface AppContext {
@@ -564,8 +564,8 @@ The context object is passed to every tool's `execute` function as the first arg
 Pass an `AbortSignal` to cancel a running agent. The signal propagates to every tool's `execute` function, so you can cancel long-running operations like HTTP requests or database queries.
 
 ```ts title="abort-tools.ts"
-import { AzureResponsesModel } from "stratus";
-import { Agent, run, tool, RunAbortedError } from "stratus/core";
+import { AzureResponsesModel } from "stratus-sdk";
+import { Agent, run, tool, RunAbortedError } from "stratus-sdk/core";
 import { z } from "zod";
 
 const model = new AzureResponsesModel({
@@ -623,8 +623,8 @@ Here's the same two-tool agent, with and without Stratus:
 <Tab value="Stratus">
 
 ```ts title="stratus.ts"
-import { AzureResponsesModel } from "stratus";
-import { Agent, run, tool } from "stratus/core";
+import { AzureResponsesModel } from "stratus-sdk";
+import { Agent, run, tool } from "stratus-sdk/core";
 import { z } from "zod";
 
 const model = new AzureResponsesModel({

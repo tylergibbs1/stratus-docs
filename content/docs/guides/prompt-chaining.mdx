@@ -10,8 +10,8 @@ Prompt chaining breaks a complex task into a sequence of focused agent runs, whe
 The simplest chain runs two agents in sequence. Agent A produces output, and you pass that output as input to Agent B.
 
 ```ts title="basic-chain.ts"
-import { Agent, run } from "stratus/core";
-import { AzureResponsesModel } from "stratus";
+import { Agent, run } from "stratus-sdk/core";
+import { AzureResponsesModel } from "stratus-sdk";
 
 const model = new AzureResponsesModel({
   endpoint: process.env.AZURE_ENDPOINT!,
@@ -53,8 +53,8 @@ Chaining gives you full control over what passes between steps. You can filter, 
 When you need typed data between steps, use `outputType` on the first agent. Stratus parses and validates the output against your Zod schema, and you get a fully typed `finalOutput` to pass downstream.
 
 ```ts title="structured-chain.ts"
-import { Agent, run } from "stratus/core";
-import { AzureResponsesModel } from "stratus";
+import { Agent, run } from "stratus-sdk/core";
+import { AzureResponsesModel } from "stratus-sdk";
 import { z } from "zod";
 
 const model = new AzureResponsesModel({
@@ -109,8 +109,8 @@ The `finalOutput` on step 1 is parsed and validated by Zod. If the model returns
 When two or more steps are independent, run them concurrently with `Promise.all()`. Combine the results in a final step.
 
 ```ts title="parallel-chain.ts"
-import { Agent, run } from "stratus/core";
-import { AzureResponsesModel } from "stratus";
+import { Agent, run } from "stratus-sdk/core";
+import { AzureResponsesModel } from "stratus-sdk";
 import { z } from "zod";
 
 const model = new AzureResponsesModel({
@@ -179,8 +179,8 @@ Both analysts run at the same time, cutting total latency roughly in half. The s
 A generate-review-refine chain improves output quality by adding an explicit grading step. Agent 1 generates a draft, Agent 2 reviews it and produces structured feedback, and Agent 3 rewrites the draft using that feedback.
 
 ```ts title="self-correction.ts"
-import { Agent, run } from "stratus/core";
-import { AzureResponsesModel } from "stratus";
+import { Agent, run } from "stratus-sdk/core";
+import { AzureResponsesModel } from "stratus-sdk";
 import { z } from "zod";
 
 const model = new AzureResponsesModel({
@@ -285,7 +285,7 @@ Chaining and subagents both connect multiple agents, but they differ in who cont
 **Use subagents when** the model needs to decide which agents to invoke and in what order. A research orchestrator does not know upfront whether it needs the web researcher, the data analyst, or both.
 
 ```ts title="chaining-vs-subagents.ts"
-import { Agent, run, subagent } from "stratus/core";
+import { Agent, run, subagent } from "stratus-sdk/core";
 import { z } from "zod";
 
 // CHAINING: You control the flow
@@ -326,8 +326,8 @@ You can combine both patterns. Use chaining for the overall pipeline structure, 
 When steps in a chain need to share conversation history -- for example, a multi-turn interview followed by a summary -- use sessions to preserve context across the chain.
 
 ```ts title="session-chain.ts"
-import { createSession, run, Agent } from "stratus/core";
-import { AzureResponsesModel } from "stratus";
+import { createSession, run, Agent } from "stratus-sdk/core";
+import { AzureResponsesModel } from "stratus-sdk";
 import { z } from "zod";
 
 const model = new AzureResponsesModel({
@@ -396,7 +396,7 @@ Each step in a chain can fail independently. Handle failures based on where they
 Catch errors at each step and decide whether to abort or continue with a fallback:
 
 ```ts title="error-handling.ts"
-import { Agent, run, OutputParseError, MaxTurnsExceededError } from "stratus/core";
+import { Agent, run, OutputParseError, MaxTurnsExceededError } from "stratus-sdk/core";
 
 async function safePipeline(input: string) {
   // Step 1: Analyze
@@ -491,8 +491,8 @@ The `MaxTurnsExceededError` and `RunAbortedError` errors terminate a single `run
 Wrap your entire chain in a single `withTrace()` call. Every `run()` inside the callback is captured as spans in the same trace, giving you end-to-end visibility.
 
 ```ts title="traced-chain.ts"
-import { Agent, run, withTrace } from "stratus/core";
-import { AzureResponsesModel } from "stratus";
+import { Agent, run, withTrace } from "stratus-sdk/core";
+import { AzureResponsesModel } from "stratus-sdk";
 
 const model = new AzureResponsesModel({
   endpoint: process.env.AZURE_ENDPOINT!,

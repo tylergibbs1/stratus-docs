@@ -10,7 +10,7 @@ Every agent run tracks token usage. Access `RunResult.usage` to monitor costs, e
 After a `run()` completes, the result includes accumulated usage across all model calls:
 
 ```ts title="usage.ts"
-import { Agent, run } from "stratus/core";
+import { Agent, run } from "stratus-sdk/core";
 
 const agent = new Agent({ name: "assistant", model });
 const result = await run(agent, "Explain TypeScript generics");
@@ -46,7 +46,7 @@ When a run involves multiple model calls (tool calls followed by a final respons
 Each model call in the run loop adds its tokens to the running total. A run that calls two tools makes at least two model calls - one that produces the tool calls, and one that generates the final response:
 
 ```ts title="tool-usage.ts"
-import { Agent, run, tool } from "stratus/core";
+import { Agent, run, tool } from "stratus-sdk/core";
 import { z } from "zod";
 
 const getWeather = tool({
@@ -77,7 +77,7 @@ console.log(result.usage.totalTokens);      // ~380
 When streaming, usage arrives in the `done` event's `response.usage` field. This is the usage for a single model call. The aggregated total is available on the final `RunResult`:
 
 ```ts title="stream-usage.ts"
-import { Agent, stream } from "stratus/core";
+import { Agent, stream } from "stratus-sdk/core";
 
 const agent = new Agent({ name: "writer", model });
 const { stream: s, result } = stream(agent, "Write a haiku");
@@ -104,7 +104,7 @@ console.log("Total:", finalResult.usage.totalTokens); // [!code highlight]
 Use `createCostEstimator()` to build a cost function from your model's pricing. Pass it as `costEstimator` in run options to get automatic cost tracking on every result.
 
 ```ts title="costs.ts"
-import { Agent, run, createCostEstimator } from "stratus/core";
+import { Agent, run, createCostEstimator } from "stratus-sdk/core";
 
 const estimator = createCostEstimator({ // [!code highlight]
   inputTokenCostPer1k: 0.005,
@@ -128,7 +128,7 @@ console.log(`Turns: ${result.numTurns}`); // [!code highlight]
 Set `maxBudgetUsd` to automatically stop runs that exceed a dollar threshold. Requires `costEstimator`.
 
 ```ts title="budget.ts"
-import { run, createCostEstimator, MaxBudgetExceededError } from "stratus/core";
+import { run, createCostEstimator, MaxBudgetExceededError } from "stratus-sdk/core";
 
 const estimator = createCostEstimator({
   inputTokenCostPer1k: 0.005,
@@ -154,7 +154,7 @@ The budget is checked after each model call. The `onStop` hook fires with `reaso
 When using sessions, each `stream()` call produces its own `RunResult` with usage for that turn:
 
 ```ts title="session-usage.ts"
-import { createSession } from "stratus/core";
+import { createSession } from "stratus-sdk/core";
 
 const session = createSession({ model, instructions: "You are a helpful assistant." });
 
@@ -188,7 +188,7 @@ Each `session.result` contains usage for that turn only. To track cumulative ses
 Combine `withTrace()` with usage tracking for full observability. Model call spans automatically include usage in their metadata:
 
 ```ts title="traced-usage.ts"
-import { withTrace, run, Agent } from "stratus/core";
+import { withTrace, run, Agent } from "stratus-sdk/core";
 
 const agent = new Agent({ name: "assistant", model, tools: [getWeather] });
 

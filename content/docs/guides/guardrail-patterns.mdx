@@ -14,9 +14,9 @@ Input guardrails run before the first model call. They inspect the user's raw me
 A straightforward guardrail that checks for known harmful patterns:
 
 ```ts title="input-screening.ts"
-import { Agent, run } from "stratus/core";
-import { AzureResponsesModel } from "stratus";
-import type { InputGuardrail } from "stratus/core";
+import { Agent, run } from "stratus-sdk/core";
+import { AzureResponsesModel } from "stratus-sdk";
+import type { InputGuardrail } from "stratus-sdk/core";
 
 const model = new AzureResponsesModel({
   endpoint: process.env.AZURE_ENDPOINT!,
@@ -125,7 +125,7 @@ Output guardrails run after the model produces a response. They check the final 
 Block responses that accidentally leak sensitive data:
 
 ```ts title="pii-guard.ts"
-import type { OutputGuardrail } from "stratus/core";
+import type { OutputGuardrail } from "stratus-sdk/core";
 
 const piiPatterns = {
   ssn: /\b\d{3}-\d{2}-\d{4}\b/,
@@ -227,8 +227,8 @@ The `beforeToolCall` hook lets you allow, deny, or modify tool calls at runtime.
 Deny tool calls that exceed a threshold and tell the model to escalate:
 
 ```ts title="tool-permission.ts"
-import { Agent, run, tool } from "stratus/core";
-import type { ToolCallDecision } from "stratus/core";
+import { Agent, run, tool } from "stratus-sdk/core";
+import type { ToolCallDecision } from "stratus-sdk/core";
 import { z } from "zod";
 
 const processRefund = tool({
@@ -320,8 +320,8 @@ Returning `void` (or nothing) from `beforeToolCall` is treated as `{ decision: "
 The `beforeHandoff` hook lets you restrict which agents can receive handoffs. Use it for role-based routing, conditional access, and audit logging.
 
 ```ts title="handoff-control.ts"
-import { Agent, run } from "stratus/core";
-import type { HandoffDecision } from "stratus/core";
+import { Agent, run } from "stratus-sdk/core";
+import type { HandoffDecision } from "stratus-sdk/core";
 
 interface AppContext {
   userRole: "customer" | "support" | "admin";
@@ -373,9 +373,9 @@ When a handoff is denied, the current agent stays active. The denial reason is s
 The real power of guardrails comes from combining all four layers on a single agent. Each layer catches a different class of problem.
 
 ```ts title="layered-defense.ts"
-import { Agent, run, tool } from "stratus/core";
-import { AzureResponsesModel } from "stratus";
-import type { InputGuardrail, OutputGuardrail } from "stratus/core";
+import { Agent, run, tool } from "stratus-sdk/core";
+import { AzureResponsesModel } from "stratus-sdk";
+import type { InputGuardrail, OutputGuardrail } from "stratus-sdk/core";
 import { z } from "zod";
 
 const model = new AzureResponsesModel({
@@ -485,9 +485,9 @@ Each layer operates independently. If one fails or misses something, the others 
 For nuanced safety checks that pattern matching cannot handle, run a lightweight model as a classifier inside a guardrail. The classifier determines whether the input is safe, and the main agent only runs if it passes.
 
 ```ts title="model-guardrail.ts"
-import { Agent, run, prompt } from "stratus/core";
-import { AzureResponsesModel } from "stratus";
-import type { InputGuardrail } from "stratus/core";
+import { Agent, run, prompt } from "stratus-sdk/core";
+import { AzureResponsesModel } from "stratus-sdk";
+import type { InputGuardrail } from "stratus-sdk/core";
 import { z } from "zod";
 
 const mainModel = new AzureResponsesModel({
@@ -560,8 +560,8 @@ const agent = new Agent({
 When your agent uses `outputType` for structured output, the output guardrail receives the raw JSON string. Parse it to validate the structure and business rules:
 
 ```ts title="structured-output-guard.ts"
-import { Agent, run } from "stratus/core";
-import type { OutputGuardrail } from "stratus/core";
+import { Agent, run } from "stratus-sdk/core";
+import type { OutputGuardrail } from "stratus-sdk/core";
 import { z } from "zod";
 
 const SupportResponse = z.object({
@@ -629,7 +629,7 @@ import {
   run,
   InputGuardrailTripwireTriggered,
   OutputGuardrailTripwireTriggered,
-} from "stratus/core";
+} from "stratus-sdk/core";
 
 async function handleMessage(input: string) {
   try {
@@ -768,7 +768,7 @@ Test that guardrails actually block the agent by catching the thrown error:
 
 ```ts title="integration.test.ts"
 import { describe, test, expect } from "bun:test";
-import { run, InputGuardrailTripwireTriggered } from "stratus/core";
+import { run, InputGuardrailTripwireTriggered } from "stratus-sdk/core";
 
 describe("agent with guardrails", () => {
   test("rejects injection attempts", async () => {

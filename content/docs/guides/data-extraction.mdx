@@ -10,8 +10,8 @@ Turn unstructured text into typed, validated data. This guide builds an extracti
 Extract structured data from text in under 20 lines:
 
 ```ts title="quick-start.ts"
-import { Agent, run } from "stratus/core";
-import { AzureResponsesModel } from "stratus";
+import { Agent, run } from "stratus-sdk/core";
+import { AzureResponsesModel } from "stratus-sdk";
 import { z } from "zod";
 
 const model = new AzureResponsesModel({ deployment: "gpt-5.2" });
@@ -71,7 +71,7 @@ Zod `.describe()` strings are included in the JSON schema sent to the model. Tre
 Wire the schema into an agent with `outputType`. The model returns JSON that Stratus parses and validates against your schema automatically.
 
 ```ts title="extractor.ts"
-import { Agent, run } from "stratus/core";
+import { Agent, run } from "stratus-sdk/core";
 
 const extractor = new Agent({
   name: "ticket_extractor",
@@ -111,7 +111,7 @@ console.log(result.finalOutput);
 Guardrails validate extracted data before it enters your system. They run automatically after each extraction and throw if the output fails validation.
 
 ```ts title="guardrails.ts"
-import type { OutputGuardrail } from "stratus/core";
+import type { OutputGuardrail } from "stratus-sdk/core";
 
 const extractionQualityGuard: OutputGuardrail = {
   name: "extraction_quality",
@@ -180,7 +180,7 @@ Output guardrails run in parallel. If any guardrail trips, Stratus throws an `Ou
 Use `prompt()` for stateless, one-shot extraction across multiple documents. Each call is independent, so there is no conversation history to manage.
 
 ```ts title="batch.ts"
-import { prompt } from "stratus/core";
+import { prompt } from "stratus-sdk/core";
 
 async function extractFromDocuments(documents: string[]) {
   const results: z.infer<typeof ExtractedTicket>[] = [];
@@ -246,7 +246,7 @@ When you combine tools with `outputType`, the agent's run loop calls tools until
 Wrap extraction calls in `withTrace()` to track performance across your pipeline. Each model call, tool execution, and guardrail check is captured as a span.
 
 ```ts title="monitored.ts"
-import { withTrace } from "stratus/core";
+import { withTrace } from "stratus-sdk/core";
 
 const { result, trace } = await withTrace("ticket_extraction", () =>
   run(enrichedExtractor, ticketText)
@@ -266,7 +266,7 @@ Extraction can fail in two ways: the model output does not match your schema, or
 <Tab value="Output Parse Error">
 
 ```ts
-import { OutputParseError } from "stratus/core";
+import { OutputParseError } from "stratus-sdk/core";
 
 try {
   const result = await run(extractor, input);
@@ -282,7 +282,7 @@ try {
 <Tab value="Guardrail Triggered">
 
 ```ts
-import { OutputGuardrailTripwireTriggered } from "stratus/core";
+import { OutputGuardrailTripwireTriggered } from "stratus-sdk/core";
 
 try {
   const result = await run(extractor, input);
