@@ -1,20 +1,26 @@
 ---
 title: Azure OpenAI
-description: Configure the Azure Chat Completions model
+description: Configure Azure Chat Completions and Responses API models
 ---
 
-Stratus includes a built-in Azure OpenAI Chat Completions implementation with streaming support via a zero-dependency SSE parser.
+Stratus includes two built-in Azure OpenAI model implementations. Both implement the `Model` interface and work with all Stratus APIs (agents, tools, sessions, streaming, etc.).
 
-## Configuration
+| Model | API | Best for |
+| --- | --- | --- |
+| `AzureChatCompletionsModel` | Chat Completions | General use, widest compatibility |
+| `AzureResponsesModel` | Responses API | Newer API format, same capabilities |
 
-```ts title="model.ts"
+## AzureChatCompletionsModel
+
+Uses the Azure Chat Completions API (`/openai/deployments/{deployment}/chat/completions`).
+
+```ts title="chat-completions.ts"
 import { AzureChatCompletionsModel } from "stratus/azure";
-// or: import { AzureChatCompletionsModel } from "stratus";
 
 const model = new AzureChatCompletionsModel({
   endpoint: "https://your-resource.openai.azure.com",
   apiKey: "your-api-key",
-  deployment: "gpt-4o",
+  deployment: "gpt-5.2",
   apiVersion: "2025-03-01-preview", // optional, this is the default
 });
 ```
@@ -28,9 +34,37 @@ const model = new AzureChatCompletionsModel({
 | `deployment` | `string` | **Required.** Model deployment name |
 | `apiVersion` | `string` | API version (default: `"2025-03-01-preview"`) |
 
+## AzureResponsesModel
+
+Uses the Azure Responses API (`/openai/responses`). The deployment name is sent as `model` in the request body rather than in the URL path.
+
+```ts title="responses.ts"
+import { AzureResponsesModel } from "stratus/azure";
+
+const model = new AzureResponsesModel({
+  endpoint: "https://your-resource.openai.azure.com",
+  apiKey: "your-api-key",
+  deployment: "gpt-5.2",
+  apiVersion: "2025-04-01-preview", // optional, this is the default
+});
+```
+
+### Config Options
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `endpoint` | `string` | **Required.** Azure OpenAI endpoint URL |
+| `apiKey` | `string` | **Required.** API key for authentication |
+| `deployment` | `string` | **Required.** Sent as `model` in request body |
+| `apiVersion` | `string` | API version (default: `"2025-04-01-preview"`) |
+
+<Callout type="info">
+Both models are interchangeable. Swap one for the other without changing any agent, tool, or session code.
+</Callout>
+
 ## Usage
 
-The model implements the `Model` interface and works with all Stratus APIs:
+Both models implement the `Model` interface and work identically with all Stratus APIs:
 
 ```ts
 // With run()
@@ -102,15 +136,15 @@ Cache token fields are populated when the Azure API returns `prompt_tokens_detai
 
 ## Authentication
 
-The Azure implementation uses `api-key` header authentication. The API key is sent as a header with every request.
+Both implementations use `api-key` header authentication. The API key is sent as a header with every request.
 
 ## Streaming
 
-The `getStreamedResponse` method uses Server-Sent Events (SSE) with a zero-dependency parser. Events are yielded as `StreamEvent` objects as they arrive from the Azure API.
+Both models use Server-Sent Events (SSE) with a shared zero-dependency parser. Events are yielded as `StreamEvent` objects as they arrive from the Azure API.
 
 ## Error Handling
 
-The Azure model throws specific errors for different failure modes:
+Both models throw the same errors for failure modes:
 
 - **`ModelError`** — General API errors (4xx/5xx responses)
 - **`ContentFilterError`** — Azure content filter blocked the request or response
@@ -128,3 +162,5 @@ try {
   }
 }
 ```
+
+Both models also retry on `429` (rate limit) responses with exponential backoff, respecting the `Retry-After` header when present.

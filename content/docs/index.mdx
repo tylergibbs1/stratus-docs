@@ -50,7 +50,7 @@ import { z } from "zod";
 const model = new AzureChatCompletionsModel({
   endpoint: process.env.AZURE_ENDPOINT!,
   apiKey: process.env.AZURE_API_KEY!,
-  deployment: "gpt-4o",
+  deployment: "gpt-5.2",
 });
 
 const getWeather = tool({
@@ -123,6 +123,7 @@ End-to-end examples showing how to combine features into real agents:
     </Folder>
     <Folder name="azure">
       <File name="chat-completions-model.ts" />
+      <File name="responses-model.ts" />
       <File name="sse-parser.ts" />
     </Folder>
   </Folder>

@@ -21,7 +21,7 @@ You need an Azure OpenAI resource with a deployed model. You'll need:
 
 - **Endpoint** — Your Azure OpenAI endpoint URL
 - **API Key** — An API key for authentication
-- **Deployment** — The name of your deployed model (e.g. `gpt-4o`)
+- **Deployment** — The name of your deployed model (e.g. `gpt-5.2`)
 
 ## Create a Model
 
@@ -31,7 +31,7 @@ import { AzureChatCompletionsModel } from "stratus";
 const model = new AzureChatCompletionsModel({
   endpoint: process.env.AZURE_ENDPOINT!,
   apiKey: process.env.AZURE_API_KEY!,
-  deployment: "gpt-4o",
+  deployment: "gpt-5.2",
 });
 ```
 
