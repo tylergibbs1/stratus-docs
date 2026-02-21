@@ -1,3 +1,77 @@
 @import "tailwindcss";
 @import "fumadocs-ui/css/neutral.css";
 @import "fumadocs-ui/css/preset.css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --fd-background: oklch(0.9755 0.0067 97.351);
+  --fd-foreground: oklch(0.2178 0 0);
+  --fd-card: oklch(1 0 0);
+  --fd-card-foreground: oklch(0.2178 0 0);
+  --fd-popover: oklch(1 0 0);
+  --fd-popover-foreground: oklch(0.2178 0 0);
+  --fd-primary: oklch(0.7414 0.0738 84.5946);
+  --fd-primary-foreground: oklch(1 0 0);
+  --fd-secondary: oklch(0.9096 0.0167 91.5611);
+  --fd-secondary-foreground: oklch(0.2178 0 0);
+  --fd-muted: oklch(0.9459 0.0165 91.5544);
+  --fd-muted-foreground: oklch(0.5022 0.0278 85.7741);
+  --fd-accent: oklch(0.8700 0.0400 88);
+  --fd-accent-foreground: oklch(0.2178 0 0);
+  --fd-border: oklch(0.8986 0.0258 97.1423);
+  --fd-ring: oklch(0.7414 0.0738 84.5946);
+}
+
+.dark {
+  --fd-background: oklch(0.1904 0.004 106.7692);
+  --fd-foreground: oklch(0.9755 0.0067 97.351);
+  --fd-card: oklch(0.2343 0.0038 106.6863);
+  --fd-card-foreground: oklch(0.9755 0.0067 97.351);
+  --fd-popover: oklch(0.2343 0.0038 106.6863);
+  --fd-popover-foreground: oklch(0.9755 0.0067 97.351);
+  --fd-primary: oklch(0.8039 0.0702 84.7579);
+  --fd-primary-foreground: oklch(0.1904 0.004 106.7692);
+  --fd-secondary: oklch(0.2901 0.0061 78.232);
+  --fd-secondary-foreground: oklch(0.9755 0.0067 97.351);
+  --fd-muted: oklch(0.2596 0.0037 106.6523);
+  --fd-muted-foreground: oklch(0.7006 0.0154 84.5911);
+  --fd-accent: oklch(0.3500 0.0200 85);
+  --fd-accent-foreground: oklch(0.9755 0.0067 97.351);
+  --fd-border: oklch(0.2901 0.0061 78.232);
+  --fd-ring: oklch(0.8039 0.0702 84.7579);
+}
+
+@theme inline {
+  --color-fd-background: var(--fd-background);
+  --color-fd-foreground: var(--fd-foreground);
+  --color-fd-card: var(--fd-card);
+  --color-fd-card-foreground: var(--fd-card-foreground);
+  --color-fd-popover: var(--fd-popover);
+  --color-fd-popover-foreground: var(--fd-popover-foreground);
+  --color-fd-primary: var(--fd-primary);
+  --color-fd-primary-foreground: var(--fd-primary-foreground);
+  --color-fd-secondary: var(--fd-secondary);
+  --color-fd-secondary-foreground: var(--fd-secondary-foreground);
+  --color-fd-muted: var(--fd-muted);
+  --color-fd-muted-foreground: var(--fd-muted-foreground);
+  --color-fd-accent: var(--fd-accent);
+  --color-fd-accent-foreground: var(--fd-accent-foreground);
+  --color-fd-border: var(--fd-border);
+  --color-fd-ring: var(--fd-ring);
+
+  --font-sans: Inter, -apple-system, sans-serif;
+  --font-mono: JetBrains Mono, monospace;
+  --font-serif: Georgia, serif;
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+}
+
+@layer base {
+  body {
+    letter-spacing: -0.02em;
+  }
+}
