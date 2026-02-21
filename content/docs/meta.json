@@ -27,7 +27,6 @@
 		"...azure",
 		"---Extensibility---",
 		"custom-models",
-		"---Guides---",
-		"...guides"
+		"guides"
 	]
 }

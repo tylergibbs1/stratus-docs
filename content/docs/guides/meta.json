@@ -1,4 +1,5 @@
 {
 	"title": "Guides",
+	"defaultOpen": true,
 	"pages": ["agentic-tool-use", "real-time-streaming", "customer-support-agent", "research-agent", "data-extraction"]
 }
