@@ -1,6 +1,17 @@
 import "./global.css";
 import { RootProvider } from "fumadocs-ui/provider/next";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import type { ReactNode } from "react";
+
+const inter = Inter({
+	subsets: ["latin"],
+	variable: "--font-inter",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+	subsets: ["latin"],
+	variable: "--font-jetbrains",
+});
 
 export const metadata = {
 	title: {
@@ -13,7 +24,7 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
 	return (
 		<html lang="en" suppressHydrationWarning>
-			<body>
+			<body className={`${inter.variable} ${jetbrainsMono.variable}`}>
 				<RootProvider>{children}</RootProvider>
 			</body>
 		</html>

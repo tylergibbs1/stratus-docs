@@ -6,31 +6,9 @@ import {
 	DocsTitle,
 } from "fumadocs-ui/page";
 import { notFound } from "next/navigation";
-import defaultMdxComponents from "fumadocs-ui/mdx";
-import { Callout } from "fumadocs-ui/components/callout";
-import { Card, Cards } from "fumadocs-ui/components/card";
-import { Tab, Tabs } from "fumadocs-ui/components/tabs";
-import { Step, Steps } from "fumadocs-ui/components/steps";
-import { File, Folder, Files } from "fumadocs-ui/components/files";
-import { Accordion, Accordions } from "fumadocs-ui/components/accordion";
+import { getMDXComponents } from "@/mdx-components";
 import { LLMCopyButton } from "@/components/llm-copy-button";
 import { getGithubLastEdit } from "fumadocs-core/content/github";
-
-const mdxComponents = {
-	...defaultMdxComponents,
-	Callout,
-	Card,
-	Cards,
-	Tab,
-	Tabs,
-	Step,
-	Steps,
-	File,
-	Folder,
-	Files,
-	Accordion,
-	Accordions,
-};
 
 const GITHUB_OWNER = "tylergibbs1";
 const GITHUB_REPO = "stratus-docs";
@@ -67,7 +45,7 @@ export default async function Page(props: {
 				<LLMCopyButton markdownUrl={`${page.url}.mdx`} />
 			</div>
 			<DocsBody>
-				<MDX components={mdxComponents} />
+				<MDX components={getMDXComponents()} />
 			</DocsBody>
 		</DocsPage>
 	);

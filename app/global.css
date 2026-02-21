@@ -60,8 +60,8 @@
   --color-fd-border: var(--fd-border);
   --color-fd-ring: var(--fd-ring);
 
-  --font-sans: Inter, -apple-system, sans-serif;
-  --font-mono: JetBrains Mono, monospace;
+  --font-sans: var(--font-inter), -apple-system, sans-serif;
+  --font-mono: var(--font-jetbrains), monospace;
   --font-serif: Georgia, serif;
 
   --radius-sm: 0.375rem;
