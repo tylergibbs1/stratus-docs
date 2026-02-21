@@ -1,0 +1,255 @@
+---
+title: Running Agents
+description: Execute agents with run(), stream(), or prompt()
+---
+
+Stratus provides three ways to execute an agent. All three handle the full tool loop, guardrails, hooks, and tracing automatically.
+
+- **`run()`** -- Execute and return the final result. Best for server-side tasks where you don't need real-time output.
+- **`stream()`** -- Execute and yield events as they arrive. Best for real-time UIs and CLIs.
+- **`prompt()`** -- One-shot convenience function. Creates a session, runs a single turn, and returns the result.
+
+## run()
+
+`run()` takes an agent and input, executes the full tool loop, and returns a `RunResult` when done. You get no intermediate output -- just the final result.
+
+```ts title="run.ts"
+import { Agent, run } from "stratus/core";
+import { AzureChatCompletionsModel } from "stratus";
+
+const model = new AzureChatCompletionsModel({
+  endpoint: process.env.AZURE_ENDPOINT!,
+  apiKey: process.env.AZURE_API_KEY!,
+  deployment: "gpt-5.2",
+});
+
+const agent = new Agent({
+  name: "assistant",
+  model,
+  instructions: "You are a helpful assistant.",
+});
+
+const result = await run(agent, "What is the capital of France?"); // [!code highlight]
+
+console.log(result.output);       // "The capital of France is Paris."
+console.log(result.messages);     // Full message history (system, user, assistant, tool)
+console.log(result.lastAgent);    // The agent that produced the final response
+console.log(result.usage);        // { promptTokens, completionTokens, totalTokens }
+console.log(result.finishReason); // "stop"
+console.log(result.finalOutput);  // undefined (no outputType set)
+```
+
+If the agent has an `outputType`, `finalOutput` contains the parsed and validated object. See [Structured Output](/docs/structured-output) for details.
+
+### RunResult
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `output` | `string` | Raw text output from the last model response |
+| `finalOutput` | `TOutput` | Parsed structured output (if `outputType` is set on the agent) |
+| `messages` | `ChatMessage[]` | Full message history for the run, including system, user, assistant, and tool messages |
+| `usage` | `UsageInfo` | Accumulated token usage across all model calls in this run |
+| `lastAgent` | `Agent` | The agent that produced the final response (differs from the entry agent after a [handoff](/docs/handoffs)) |
+| `finishReason` | `string?` | The model's finish reason from the last call (`"stop"`, `"tool_calls"`, etc.) |
+
+`UsageInfo` includes `promptTokens`, `completionTokens`, `totalTokens`, and optional `cacheReadTokens` and `cacheCreationTokens` fields.
+
+## stream()
+
+`stream()` returns two things: an async generator of `StreamEvent` objects and a `Promise<RunResult>`. You must drain the stream before awaiting the result.
+
+```ts title="stream.ts"
+import { Agent, stream } from "stratus/core";
+
+const agent = new Agent({
+  name: "writer",
+  model,
+  instructions: "You are a creative writer.",
+});
+
+const { stream: s, result } = stream(agent, "Write a haiku about TypeScript"); // [!code highlight]
+
+for await (const event of s) { // [!code highlight]
+  if (event.type === "content_delta") {
+    process.stdout.write(event.content);
+  }
+}
+
+const finalResult = await result; // [!code highlight]
+console.log(finalResult.output);
+console.log(finalResult.usage);
+```
+
+<Callout type="warn">
+You must fully consume the stream before awaiting `result`. If you skip the stream, the result promise never resolves.
+</Callout>
+
+### Stream Events
+
+| Event | Fields | Description |
+| --- | --- | --- |
+| `content_delta` | `content: string` | A chunk of text content from the model |
+| `tool_call_start` | `toolCall: { id, name }` | A tool call has started |
+| `tool_call_delta` | `toolCallId, arguments` | Incremental tool call argument data |
+| `tool_call_done` | `toolCallId` | Tool call arguments are complete |
+| `done` | `response: ModelResponse` | The model finished a response |
+
+When the model makes tool calls, you see multiple rounds of events. Each round starts with tool call events, followed by content events after the tools execute and the model responds again.
+
+```ts title="multi-round-events.ts"
+for await (const event of s) {
+  switch (event.type) {
+    case "tool_call_start":
+      console.log(`Calling: ${event.toolCall.name}`);
+      break;
+    case "content_delta":
+      process.stdout.write(event.content);
+      break;
+    case "done":
+      // One 'done' per model call — multiple if tools are used
+      console.log(`Tokens: ${event.response.usage?.totalTokens}`);
+      break;
+  }
+}
+```
+
+## prompt()
+
+`prompt()` is the simplest way to get a response. It creates a temporary session, sends your message, drains the stream, and returns the result.
+
+```ts title="prompt.ts"
+import { prompt } from "stratus/core";
+
+const result = await prompt("What is 2 + 2?", { // [!code highlight]
+  model,
+  instructions: "You are a math tutor.",
+  tools: [calculator],
+});
+
+console.log(result.output); // "4"
+```
+
+<Callout type="info">
+`prompt()` creates a temporary session under the hood. For multi-turn conversations, use [`createSession()`](/docs/sessions) instead.
+</Callout>
+
+`prompt()` accepts the same configuration options as `createSession()` -- including `tools`, `instructions`, `outputType`, `guardrails`, and `hooks`.
+
+## Options
+
+`run()` and `stream()` accept an optional `RunOptions` object as the third argument:
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `context` | `TContext` | `undefined` | Shared context object passed to instructions, tools, guardrails, and hooks |
+| `maxTurns` | `number` | `10` | Maximum number of model calls before throwing `MaxTurnsExceededError` |
+| `signal` | `AbortSignal` | `undefined` | Abort signal for cancellation. Throws `RunAbortedError` when aborted |
+| `model` | `Model` | Agent's model | Override the agent's model for this run |
+
+```ts title="options.ts"
+const ac = new AbortController();
+setTimeout(() => ac.abort(), 10_000);
+
+const result = await run(agent, "Summarize this document", {
+  context: { userId: "user_123", db: myDatabase },
+  maxTurns: 5,
+  signal: ac.signal,
+});
+```
+
+## Passing input
+
+You can pass input as a plain string, an array of `ChatMessage` objects, or a `ContentPart[]` array for multimodal content.
+
+<Tabs items={["String", "ChatMessage[]", "Multimodal"]}>
+<Tab value="String">
+
+The most common form. Stratus wraps it in a user message automatically.
+
+```ts
+const result = await run(agent, "Hello, world!");
+```
+
+</Tab>
+<Tab value="ChatMessage[]">
+
+Pass a full message array when you need to prefill conversation history or include system messages:
+
+```ts
+import type { ChatMessage } from "stratus/core";
+
+const messages: ChatMessage[] = [
+  { role: "user", content: "My name is Alice." },
+  { role: "assistant", content: "Hello Alice! How can I help?" },
+  { role: "user", content: "What is my name?" },
+];
+
+const result = await run(agent, messages);
+```
+
+</Tab>
+<Tab value="Multimodal">
+
+Use `ContentPart[]` inside a message to send images alongside text:
+
+```ts
+import type { ChatMessage, ContentPart } from "stratus/core";
+
+const messages: ChatMessage[] = [
+  {
+    role: "user",
+    content: [
+      { type: "text", text: "What is in this image?" },
+      { type: "image_url", image_url: { url: "https://example.com/photo.png" } },
+    ],
+  },
+];
+
+const result = await run(agent, messages);
+```
+
+</Tab>
+</Tabs>
+
+## Multi-turn with sessions
+
+`run()` and `stream()` are stateless -- they don't preserve messages between calls. For multi-turn conversations, use sessions:
+
+```ts title="multi-turn.ts"
+import { createSession } from "stratus/core";
+
+await using session = createSession({
+  model,
+  instructions: "You are a helpful assistant.",
+  tools: [getWeather],
+});
+
+session.send("What's the weather in NYC?");
+for await (const event of session.stream()) {
+  if (event.type === "content_delta") process.stdout.write(event.content);
+}
+
+session.send("What about London?");
+for await (const event of session.stream()) {
+  if (event.type === "content_delta") process.stdout.write(event.content);
+}
+```
+
+See [Sessions](/docs/sessions) for the full API, including save/resume/fork and `Symbol.asyncDispose`.
+
+## Next steps
+
+<Cards>
+  <Card title="Agents" href="/docs/agents">
+    Configure agents with instructions, tools, and model settings
+  </Card>
+  <Card title="Streaming" href="/docs/streaming">
+    Deep dive into stream events and abort signals
+  </Card>
+  <Card title="Sessions" href="/docs/sessions">
+    Multi-turn conversations with persistent history
+  </Card>
+  <Card title="Structured Output" href="/docs/structured-output">
+    Parse model responses into typed objects with Zod
+  </Card>
+</Cards>

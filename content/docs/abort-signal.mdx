@@ -1,0 +1,215 @@
+---
+title: Abort & Cancellation
+description: Cancel agent runs with AbortSignal
+---
+
+Pass an `AbortSignal` to cancel a run at any point. The signal propagates to model API calls, tool executions, and session streams.
+
+- **Immediate cancellation** — Pre-aborted signals throw before the first API call
+- **Mid-run cancellation** — Abort during tool execution or between model calls
+- **Signal propagation** — Tools receive the signal via `options.signal` in their execute function
+
+## Basic usage
+
+Create an `AbortController`, pass its signal to `run()`, and call `abort()` when you want to cancel. The run throws a `RunAbortedError` that you can catch and handle.
+
+```ts title="basic-abort.ts"
+import { Agent, run, RunAbortedError } from "stratus/core";
+
+const agent = new Agent({ name: "writer", model });
+const ac = new AbortController();
+
+// Cancel after 10 seconds
+setTimeout(() => ac.abort(), 10_000);
+
+try {
+  const result = await run(agent, "Write a detailed essay on climate change", {
+    signal: ac.signal, // [!code highlight]
+  });
+  console.log(result.output);
+} catch (error) {
+  if (error instanceof RunAbortedError) {
+    console.log("Run was cancelled");
+  }
+}
+```
+
+## Timeout pattern
+
+Use `AbortSignal.timeout()` to automatically cancel a run after a fixed duration. No `AbortController` needed.
+
+```ts title="timeout.ts"
+import { Agent, run, RunAbortedError } from "stratus/core";
+
+const agent = new Agent({ name: "researcher", model });
+
+try {
+  const result = await run(agent, "Summarize recent developments in AI", {
+    signal: AbortSignal.timeout(5_000), // [!code highlight]
+  });
+  console.log(result.output);
+} catch (error) {
+  if (error instanceof RunAbortedError) {
+    console.log("Run timed out after 5 seconds");
+  }
+}
+```
+
+## Cancel on user disconnect
+
+In an HTTP server, abort the run when the client disconnects. This prevents wasted compute on abandoned requests.
+
+```ts title="server-abort.ts"
+import { Agent, run, RunAbortedError } from "stratus/core";
+import { createServer } from "node:http";
+
+const agent = new Agent({ name: "assistant", model });
+
+createServer(async (req, res) => {
+  const ac = new AbortController();
+  req.on("close", () => ac.abort()); // [!code highlight]
+
+  try {
+    const result = await run(agent, "Answer the user's question", {
+      signal: ac.signal,
+    });
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end(result.output);
+  } catch (error) {
+    if (error instanceof RunAbortedError) {
+      // Client disconnected — nothing to send
+      return;
+    }
+    res.writeHead(500);
+    res.end("Internal server error");
+  }
+}).listen(3000);
+```
+
+## Signal in tools
+
+When a run is started with a signal, it is passed to each tool's `execute` function via the `options` parameter. Forward it to any async operations so they cancel promptly.
+
+```ts title="signal-in-tool.ts"
+import { tool } from "stratus/core";
+import { z } from "zod";
+
+const searchDocs = tool({
+  name: "search_docs",
+  description: "Search the documentation index",
+  parameters: z.object({ query: z.string() }),
+  execute: async (_ctx, { query }, options) => {
+    const res = await fetch(`https://api.example.com/search?q=${query}`, {
+      signal: options?.signal, // [!code highlight]
+    });
+    return await res.text();
+  },
+});
+```
+
+Any `fetch`, database query, or child process that accepts an `AbortSignal` can use it. If the run is aborted, these operations cancel immediately instead of running to completion.
+
+## With streaming
+
+Pass the signal through `stream()` the same way. Both the stream generator and the result promise reject with `RunAbortedError`.
+
+```ts title="stream-abort.ts"
+import { Agent, stream, RunAbortedError } from "stratus/core";
+
+const agent = new Agent({ name: "writer", model });
+const ac = new AbortController();
+
+setTimeout(() => ac.abort(), 5_000);
+
+const { stream: s, result } = stream(agent, "Write a short story", {
+  signal: ac.signal, // [!code highlight]
+});
+
+try {
+  for await (const event of s) {
+    if (event.type === "content_delta") {
+      process.stdout.write(event.content);
+    }
+  }
+} catch (error) {
+  if (error instanceof RunAbortedError) {
+    console.log("\nStream was cancelled");
+  }
+}
+
+// The result promise also rejects with RunAbortedError
+```
+
+## With sessions
+
+Pass the signal to `session.stream()`. The signal is per-invocation, not per-session — you can abort one turn and continue using the session for subsequent turns.
+
+```ts title="session-abort.ts"
+import { createSession, RunAbortedError } from "stratus/core";
+
+const session = createSession({ model, instructions: "You are a helpful assistant." });
+const ac = new AbortController();
+
+session.send("Write a very long essay about the history of computing.");
+
+try {
+  for await (const event of session.stream({ signal: ac.signal })) { // [!code highlight]
+    if (event.type === "content_delta") {
+      process.stdout.write(event.content);
+    }
+  }
+} catch (error) {
+  if (error instanceof RunAbortedError) {
+    console.log("\nSession stream was cancelled");
+  }
+}
+```
+
+## RunAbortedError
+
+`RunAbortedError` extends `StratusError`. It is thrown whenever a signal is aborted — whether before the run starts or mid-execution.
+
+```ts title="error-handling.ts"
+import { RunAbortedError, StratusError } from "stratus/core";
+
+try {
+  await run(agent, input, { signal });
+} catch (error) {
+  if (error instanceof RunAbortedError) {
+    // Specific: the run was cancelled
+    console.log(error.message); // "Run was aborted"
+    console.log(error.name);    // "RunAbortedError"
+  } else if (error instanceof StratusError) {
+    // Other Stratus errors (ModelError, MaxTurnsExceededError, etc.)
+    console.error(error.message);
+  }
+}
+```
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `name` | `string` | Always `"RunAbortedError"` |
+| `message` | `string` | `"Run was aborted"` (default) or a custom message |
+
+Pre-aborted signals (where `signal.aborted` is `true` before calling `run()` or `stream()`) throw `RunAbortedError` immediately without making any API calls.
+
+<Callout type="warn">
+Once aborted, a run cannot be resumed. If you need to retry, create a new run with a fresh `AbortController`.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Streaming" href="/docs/streaming">
+    Real-time response streaming with abort support
+  </Card>
+  <Card title="Tools" href="/docs/tools">
+    Forward the signal to tool execute functions
+  </Card>
+  <Card title="Sessions" href="/docs/sessions">
+    Per-invocation abort for multi-turn conversations
+  </Card>
+  <Card title="Errors" href="/docs/errors">
+    Full error hierarchy reference
+  </Card>
+</Cards>

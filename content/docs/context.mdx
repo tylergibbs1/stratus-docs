@@ -1,0 +1,229 @@
+---
+title: Context
+description: Share state across agents, tools, and hooks with typed context
+---
+
+Context lets you pass shared state -- database connections, API clients, user info -- through the entire agent execution. Tools, hooks, and guardrails all receive the same context object.
+
+- **Type-safe** -- Define a context interface and use `Agent<TContext>` for full type checking
+- **Immutable reference** -- The same context object is passed to every tool and hook call
+- **No globals** -- Context is scoped to a single run, not shared across runs
+
+## Basic usage
+
+Define an interface for your context, then pass it to `Agent<TContext>` and provide the value via `run()`:
+
+```ts title="context.ts"
+import { AzureResponsesModel } from "stratus";
+import { Agent, run } from "stratus/core";
+
+interface AppContext {
+  userId: string; // [!code highlight]
+  db: Database; // [!code highlight]
+  logger: Logger; // [!code highlight]
+}
+
+const model = new AzureResponsesModel({
+  endpoint: process.env.AZURE_ENDPOINT!,
+  apiKey: process.env.AZURE_API_KEY!,
+  deployment: "gpt-5.2",
+});
+
+const agent = new Agent<AppContext>({ // [!code highlight]
+  name: "support",
+  model,
+  instructions: "You are a customer support agent.",
+  tools: [lookupOrder, cancelOrder],
+});
+
+const result = await run(agent, "Where is my order #123?", {
+  context: { userId: "user_abc", db: myDb, logger: myLogger }, // [!code highlight]
+});
+```
+
+The generic parameter `Agent<AppContext>` flows through the entire system. TypeScript will enforce that every tool, hook, and guardrail on this agent uses the same context type.
+
+## Accessing context in tools
+
+The `execute` function receives context as its first argument:
+
+```ts title="context-tool.ts"
+import { tool } from "stratus/core";
+import { z } from "zod";
+
+interface AppContext {
+  userId: string;
+  db: Database;
+}
+
+const lookupOrder = tool({
+  name: "lookup_order",
+  description: "Look up an order by ID",
+  parameters: z.object({ orderId: z.string() }),
+  execute: async (ctx: AppContext, { orderId }) => { // [!code highlight]
+    const order = await ctx.db.orders.find(orderId, ctx.userId); // [!code highlight]
+    return JSON.stringify(order);
+  },
+});
+```
+
+The `ctx` parameter is fully typed -- you get autocomplete for `ctx.db`, `ctx.userId`, and any other properties on your interface.
+
+## Dynamic instructions
+
+Instructions can be a function that receives context, letting you customize the system prompt per-request:
+
+```ts title="dynamic-instructions.ts"
+const agent = new Agent<AppContext>({
+  name: "support",
+  model,
+  instructions: (ctx) => // [!code highlight]
+    `You are a support agent for user ${ctx.userId}. ` + // [!code highlight]
+    `Their account tier is ${ctx.db.getTier(ctx.userId)}.`, // [!code highlight]
+  tools: [lookupOrder],
+});
+```
+
+Async functions are also supported:
+
+```ts
+instructions: async (ctx) => {
+  const rules = await ctx.db.getRules(ctx.userId);
+  return `Follow these rules: ${rules}`;
+},
+```
+
+## Accessing context in hooks
+
+Every hook receives `context` in its parameter object. Use this for audit logging, metrics, or permission checks:
+
+```ts title="context-hooks.ts"
+const agent = new Agent<AppContext>({
+  name: "support",
+  model,
+  hooks: {
+    beforeRun: async ({ agent, input, context }) => { // [!code highlight]
+      context.logger.info(`[${agent.name}] user=${context.userId} input="${input}"`); // [!code highlight]
+    },
+    afterRun: async ({ result, context }) => {
+      context.logger.info(`Response: ${result.output}`);
+    },
+    beforeToolCall: ({ toolCall, context }) => {
+      if (toolCall.function.name === "cancel_order" && !context.isAdmin) {
+        return { decision: "deny", reason: "Admin access required" };
+      }
+    },
+  },
+});
+```
+
+See [Hooks](/docs/hooks) for the full set of lifecycle callbacks.
+
+## Accessing context in guardrails
+
+Guardrails receive context as their second argument. Use it for user-specific validation:
+
+```ts title="context-guardrail.ts"
+import type { InputGuardrail } from "stratus/core";
+
+interface AppContext {
+  userId: string;
+  tenantId: string;
+}
+
+const tenantGuardrail: InputGuardrail<AppContext> = { // [!code highlight]
+  name: "tenant_check",
+  execute: async (input, ctx) => { // [!code highlight]
+    const isAllowed = await checkTenantPermissions(ctx.tenantId, input);
+    return { tripwireTriggered: !isAllowed };
+  },
+};
+
+const agent = new Agent<AppContext>({
+  name: "support",
+  model,
+  inputGuardrails: [tenantGuardrail],
+});
+```
+
+See [Guardrails](/docs/guardrails) for input and output validation details.
+
+## Context with sessions
+
+Pass context via `createSession()`. It flows to every `stream()` call for the lifetime of the session:
+
+```ts title="session-context.ts"
+import { createSession } from "stratus/core";
+
+const session = createSession<AppContext>({
+  model,
+  instructions: "You are a customer support agent.",
+  tools: [lookupOrder, cancelOrder],
+  context: { userId: "user_abc", db: myDb, logger: myLogger }, // [!code highlight]
+});
+
+session.send("Where is my order?");
+for await (const event of session.stream()) {
+  if (event.type === "content_delta") process.stdout.write(event.content);
+}
+```
+
+<Callout>
+Session context is set once at creation time. To change context between turns, create a new session or use `resumeSession()` with a new config.
+</Callout>
+
+## Context with handoffs
+
+<Callout type="info">
+Context is shared across all agents in a handoff chain. When Agent A hands off to Agent B, both receive the same context object.
+</Callout>
+
+All agents in a handoff chain must share the same `TContext` type. This is enforced at the type level:
+
+```ts title="handoff-context.ts"
+interface AppContext {
+  userId: string;
+  db: Database;
+}
+
+const refundAgent = new Agent<AppContext>({
+  name: "refunds",
+  model,
+  instructions: "Process refund requests.",
+  tools: [processRefund], // processRefund receives AppContext too
+});
+
+const triageAgent = new Agent<AppContext>({ // [!code highlight]
+  name: "triage",
+  model,
+  instructions: "Route the user to the right specialist.",
+  handoffs: [refundAgent], // [!code highlight]
+});
+
+await run(triageAgent, "I want a refund", {
+  context: { userId: "user_abc", db: myDb }, // [!code highlight]
+});
+// When triage hands off to refunds, the same context is passed through
+```
+
+The `onHandoff` callback also receives context:
+
+```ts
+import { handoff } from "stratus/core";
+
+handoff({
+  agent: refundAgent,
+  onHandoff: async (ctx) => { // [!code highlight]
+    await ctx.db.audit.log("handoff_to_refunds", ctx.userId);
+  },
+});
+```
+
+## Next steps
+
+<Cards>
+  <Card title="Tools" href="/docs/tools" description="Give agents the ability to call functions" />
+  <Card title="Hooks" href="/docs/hooks" description="Lifecycle callbacks for observability and permission control" />
+  <Card title="Guardrails" href="/docs/guardrails" description="Input and output validation with tripwire support" />
+  <Card title="Sessions" href="/docs/sessions" description="Multi-turn conversations with persistent message history" />
+</Cards>

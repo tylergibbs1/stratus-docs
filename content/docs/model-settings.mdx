@@ -1,0 +1,205 @@
+---
+title: Model Settings
+description: Configure temperature, tool choice, and other model parameters
+---
+
+Model settings control how the model generates responses. You set them on the agent at construction time.
+
+## Setting on an agent
+
+Pass a `modelSettings` object when creating an agent:
+
+```ts title="agent-settings.ts"
+import { Agent } from "stratus/core";
+
+const agent = new Agent({
+  name: "assistant",
+  model,
+  modelSettings: {
+    temperature: 0.7,
+    maxTokens: 1000,
+  },
+});
+```
+
+Settings are sent to the model on every call the agent makes. To change settings between runs, clone the agent with new values:
+
+```ts title="clone-settings.ts"
+const creativeAgent = agent.clone({
+  modelSettings: { temperature: 1.2, topP: 0.95 },
+});
+```
+
+## ModelSettings reference
+
+| Setting | Type | Default | Description |
+| --- | --- | --- | --- |
+| `temperature` | `number` | Model default | Sampling temperature. Higher values (closer to 2) produce more random output. Lower values (closer to 0) produce more deterministic output. Range: 0--2. |
+| `topP` | `number` | Model default | Nucleus sampling. The model considers tokens whose cumulative probability exceeds this threshold. Range: 0--1. |
+| `maxTokens` | `number` | Model default | Maximum number of tokens to generate in the response. |
+| `stop` | `string[]` | `undefined` | Stop sequences. The model stops generating when it produces any of these strings. |
+| `presencePenalty` | `number` | `0` | Penalizes tokens that have already appeared, encouraging the model to talk about new topics. Range: -2 to 2. |
+| `frequencyPenalty` | `number` | `0` | Penalizes tokens proportional to how often they've appeared, reducing repetition. Range: -2 to 2. |
+| `toolChoice` | `ToolChoice` | `"auto"` | Controls which tools the model can call. See [Tool choice](#tool-choice). |
+| `parallelToolCalls` | `boolean` | `true` | Whether the model can call multiple tools in a single turn. |
+| `seed` | `number` | `undefined` | Seed for deterministic sampling. Repeated requests with the same seed and parameters should return the same result. |
+
+## Tool choice
+
+The `toolChoice` setting controls whether and how the model calls tools. Set it inside `modelSettings`.
+
+<Tabs items={["auto", "required", "none", "Specific function"]}>
+<Tab value="auto">
+
+The default. The model decides whether to call a tool or respond with text.
+
+```ts title="tool-choice-auto.ts"
+const agent = new Agent({
+  name: "assistant",
+  model,
+  tools: [getWeather],
+  modelSettings: {
+    toolChoice: "auto", // [!code highlight]
+  },
+});
+```
+
+</Tab>
+<Tab value="required">
+
+Forces the model to call at least one tool. It will not respond with text alone.
+
+```ts title="tool-choice-required.ts"
+const agent = new Agent({
+  name: "assistant",
+  model,
+  tools: [getWeather, searchDocs],
+  modelSettings: {
+    toolChoice: "required", // [!code highlight]
+  },
+});
+```
+
+</Tab>
+<Tab value="none">
+
+Prevents the model from calling any tools, even if tools are defined on the agent. The model responds with text only.
+
+```ts title="tool-choice-none.ts"
+const agent = new Agent({
+  name: "assistant",
+  model,
+  tools: [getWeather],
+  modelSettings: {
+    toolChoice: "none", // [!code highlight]
+  },
+});
+```
+
+</Tab>
+<Tab value="Specific function">
+
+Forces the model to call one specific tool by name. Useful when you know exactly which tool should run.
+
+```ts title="tool-choice-function.ts"
+const agent = new Agent({
+  name: "assistant",
+  model,
+  tools: [getWeather, searchDocs],
+  modelSettings: {
+    toolChoice: { // [!code highlight]
+      type: "function", // [!code highlight]
+      function: { name: "get_weather" }, // [!code highlight]
+    }, // [!code highlight]
+  },
+});
+```
+
+</Tab>
+</Tabs>
+
+## Tool use behavior
+
+`toolUseBehavior` is separate from `modelSettings`. It is set directly on the agent and controls what happens _after_ a tool executes -- not what the model generates.
+
+<Tabs items={["run_llm_again", "stop_on_first_tool", "stopAtToolNames"]}>
+<Tab value="run_llm_again">
+
+The default. After a tool executes, the result is sent back to the model so it can generate a follow-up response or call more tools.
+
+```ts title="behavior-run-again.ts"
+const agent = new Agent({
+  name: "assistant",
+  model,
+  tools: [getWeather],
+  toolUseBehavior: "run_llm_again", // [!code highlight]
+});
+```
+
+</Tab>
+<Tab value="stop_on_first_tool">
+
+Stops the run immediately after the first tool call completes. The tool's return value becomes the run output. The model is not called again.
+
+```ts title="behavior-stop-first.ts"
+const agent = new Agent({
+  name: "data-fetcher",
+  model,
+  tools: [fetchData],
+  toolUseBehavior: "stop_on_first_tool", // [!code highlight]
+});
+
+const result = await run(agent, "Get the latest sales data");
+// result.output is the return value of fetchData
+```
+
+This is useful when the agent's only job is to pick and invoke the right tool.
+
+</Tab>
+<Tab value="stopAtToolNames">
+
+Stops only when a specific tool is called. Other tools feed their results back to the model as usual.
+
+```ts title="behavior-stop-at.ts"
+const agent = new Agent({
+  name: "researcher",
+  model,
+  tools: [searchDocs, summarize, finalAnswer],
+  toolUseBehavior: { // [!code highlight]
+    stopAtToolNames: ["final_answer"], // [!code highlight]
+  }, // [!code highlight]
+});
+```
+
+The agent can call `searchDocs` and `summarize` as many times as it needs. The run stops only when it calls `final_answer`.
+
+</Tab>
+</Tabs>
+
+<Callout type="info">
+`toolUseBehavior` is set on the Agent, not in `modelSettings`. It controls what happens after a tool executes, not what the model generates.
+</Callout>
+
+## Response format
+
+Structured output is configured via `outputType` on the agent, not through `modelSettings` directly. When you set `outputType` to a Zod schema, Stratus sends the appropriate `response_format` to Azure automatically.
+
+```ts
+const agent = new Agent({
+  name: "extractor",
+  model,
+  outputType: z.object({
+    name: z.string(),
+    age: z.number(),
+  }),
+});
+```
+
+See [Structured Output](/docs/structured-output) for details.
+
+## Next steps
+
+- [Tools](/docs/tools) -- define functions the model can call
+- [Agents](/docs/agents) -- agent configuration reference
+- [Streaming](/docs/streaming) -- stream responses in real time
+- [Hooks](/docs/hooks) -- intercept tool calls and handoffs before they execute

@@ -1,0 +1,370 @@
+---
+title: Custom Model Providers
+description: Implement the Model interface to use any LLM provider
+---
+
+Stratus is provider-agnostic at its core. The `stratus/core` package defines a `Model` interface that any LLM provider can implement. Azure is the built-in implementation, but you can plug in OpenAI, Anthropic, local models, or any other provider.
+
+- **Two methods** — `getResponse()` for non-streaming, `getStreamedResponse()` for streaming
+- **Standard types** — `ChatMessage[]` input, `ModelResponse` output
+- **Full compatibility** — Custom models work with all SDK features (tools, handoffs, guardrails, sessions, tracing)
+
+## The Model interface
+
+```ts
+import type {
+  Model,
+  ModelRequest,
+  ModelRequestOptions,
+  ModelResponse,
+  StreamEvent,
+} from "stratus/core";
+```
+
+The `Model` interface requires two methods:
+
+```ts
+interface Model {
+  getResponse(
+    request: ModelRequest,
+    options?: ModelRequestOptions,
+  ): Promise<ModelResponse>;
+
+  getStreamedResponse(
+    request: ModelRequest,
+    options?: ModelRequestOptions,
+  ): AsyncIterable<StreamEvent>;
+}
+```
+
+`getResponse()` makes a single request and returns the full response. `getStreamedResponse()` returns an async iterable of `StreamEvent` objects that the SDK consumes as they arrive. Both methods receive the same `ModelRequest` input and an optional `ModelRequestOptions` with an `AbortSignal`.
+
+## Implementing a custom model
+
+Here is a minimal model that echoes the last user message and supports both methods:
+
+```ts title="echo-model.ts"
+import type {
+  Model,
+  ModelRequest,
+  ModelRequestOptions,
+  ModelResponse,
+  StreamEvent,
+} from "stratus/core";
+
+export class EchoModel implements Model {
+  async getResponse(
+    request: ModelRequest,
+    _options?: ModelRequestOptions,
+  ): Promise<ModelResponse> {
+    const lastMessage = request.messages.at(-1);
+    const text = lastMessage?.role === "user"
+      ? typeof lastMessage.content === "string"
+        ? lastMessage.content
+        : "echo"
+      : "echo";
+
+    return {
+      content: `Echo: ${text}`,
+      toolCalls: [],
+      usage: {
+        promptTokens: 0,
+        completionTokens: 0,
+        totalTokens: 0,
+      },
+      finishReason: "stop",
+    };
+  }
+
+  async *getStreamedResponse(
+    request: ModelRequest,
+    options?: ModelRequestOptions,
+  ): AsyncGenerator<StreamEvent> {
+    // Reuse getResponse and emit the result as stream events
+    const response = await this.getResponse(request, options);
+    const content = response.content ?? "";
+
+    // Stream content one word at a time
+    const words = content.split(" ");
+    for (const [i, word] of words.entries()) {
+      const chunk = i < words.length - 1 ? `${word} ` : word;
+      yield { type: "content_delta", content: chunk };
+    }
+
+    yield { type: "done", response };
+  }
+}
+```
+
+This works with `run()`, `stream()`, sessions, and every other SDK feature.
+
+## ModelRequest
+
+The `ModelRequest` object is passed to both model methods. It contains everything the model needs to generate a response.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `messages` | `ChatMessage[]` | The conversation history (system, user, assistant, tool messages) |
+| `tools` | `ToolDefinition[]` | Tool definitions the model can call. Optional — omitted when the agent has no tools |
+| `modelSettings` | `ModelSettings` | Temperature, max tokens, top-p, stop sequences, tool choice, and other generation parameters |
+| `responseFormat` | `ResponseFormat` | Output format constraint (`text`, `json_object`, or `json_schema` for structured output) |
+
+<Callout>
+`ChatMessage` is a union of `SystemMessage`, `UserMessage`, `AssistantMessage`, and `ToolMessage`. User messages support multimodal content via `ContentPart[]`.
+</Callout>
+
+## ModelResponse
+
+The `ModelResponse` is what both methods must produce. For streaming, the final `done` event must include the complete `ModelResponse`.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `content` | `string \| null` | The text content of the model's response. `null` when the model only made tool calls |
+| `toolCalls` | `ToolCall[]` | Tool calls the model wants to execute. Empty array when there are no tool calls |
+| `usage` | `UsageInfo` | Token usage statistics (prompt, completion, total, cache tokens). Optional |
+| `finishReason` | `string` | Why the model stopped generating (`stop`, `tool_calls`, `length`, `content_filter`). Optional |
+
+## StreamEvent types
+
+The `getStreamedResponse()` method yields a sequence of `StreamEvent` objects. The SDK processes these to build up the response incrementally.
+
+| Event Type | Payload | Description |
+| --- | --- | --- |
+| `content_delta` | `{ content: string }` | A chunk of text content. Emitted as the model generates text |
+| `tool_call_start` | `{ toolCall: { id: string; name: string } }` | A new tool call has started. Emitted once per tool call |
+| `tool_call_delta` | `{ toolCallId: string; arguments: string }` | A chunk of JSON arguments for an in-progress tool call |
+| `tool_call_done` | `{ toolCallId: string }` | A tool call's arguments are complete |
+| `done` | `{ response: ModelResponse }` | The stream is finished. Must include the full `ModelResponse` with all content and tool calls |
+
+<Callout type="warn">
+The `done` event is required. The SDK relies on it to finalize the response, update usage tracking, and determine the finish reason.
+</Callout>
+
+## Example: OpenAI-compatible provider
+
+Here is a sketch of how you would wrap the OpenAI chat completions API:
+
+```ts title="openai-model.ts"
+import type {
+  Model,
+  ModelRequest,
+  ModelRequestOptions,
+  ModelResponse,
+  StreamEvent,
+  UsageInfo,
+} from "stratus/core";
+import type { ToolCall } from "stratus/core";
+
+interface OpenAIModelConfig {
+  apiKey: string;
+  model: string;
+  baseUrl?: string;
+}
+
+export class OpenAIModel implements Model {
+  private readonly apiKey: string;
+  private readonly model: string;
+  private readonly baseUrl: string;
+
+  constructor(config: OpenAIModelConfig) {
+    this.apiKey = config.apiKey;
+    this.model = config.model;
+    this.baseUrl = config.baseUrl ?? "https://api.openai.com/v1";
+  }
+
+  async getResponse(
+    request: ModelRequest,
+    options?: ModelRequestOptions,
+  ): Promise<ModelResponse> {
+    const body = this.buildBody(request);
+    const res = await fetch(`${this.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify(body),
+      signal: options?.signal,
+    });
+
+    if (!res.ok) {
+      throw new Error(`OpenAI API error: ${res.status}`);
+    }
+
+    const json = await res.json();
+    return this.parseResponse(json);
+  }
+
+  async *getStreamedResponse(
+    request: ModelRequest,
+    options?: ModelRequestOptions,
+  ): AsyncGenerator<StreamEvent> {
+    const body = { ...this.buildBody(request), stream: true };
+    const res = await fetch(`${this.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify(body),
+      signal: options?.signal,
+    });
+
+    if (!res.ok) {
+      throw new Error(`OpenAI API error: ${res.status}`);
+    }
+
+    // Parse SSE stream, accumulate content and tool calls,
+    // yield content_delta / tool_call_start / tool_call_delta events,
+    // then yield tool_call_done for each tool call and a final done event.
+    // See AzureChatCompletionsModel source for a complete SSE implementation.
+
+    let content = "";
+    const toolCalls: ToolCall[] = [];
+
+    // ... SSE parsing logic here ...
+
+    yield {
+      type: "done",
+      response: { content: content || null, toolCalls, finishReason: "stop" },
+    };
+  }
+
+  private buildBody(request: ModelRequest): Record<string, unknown> {
+    const body: Record<string, unknown> = {
+      model: this.model,
+      messages: request.messages,
+    };
+
+    if (request.tools?.length) {
+      body.tools = request.tools;
+    }
+    if (request.responseFormat) {
+      body.response_format = request.responseFormat;
+    }
+
+    const s = request.modelSettings;
+    if (s?.temperature !== undefined) body.temperature = s.temperature;
+    if (s?.maxTokens !== undefined) body.max_tokens = s.maxTokens;
+    if (s?.topP !== undefined) body.top_p = s.topP;
+    if (s?.stop !== undefined) body.stop = s.stop;
+    if (s?.toolChoice !== undefined) body.tool_choice = s.toolChoice;
+
+    return body;
+  }
+
+  private parseResponse(json: any): ModelResponse {
+    const choice = json.choices[0];
+    const toolCalls: ToolCall[] = (choice.message.tool_calls ?? []).map(
+      (tc: any) => ({
+        id: tc.id,
+        type: "function" as const,
+        function: { name: tc.function.name, arguments: tc.function.arguments },
+      }),
+    );
+
+    const usage: UsageInfo | undefined = json.usage
+      ? {
+          promptTokens: json.usage.prompt_tokens,
+          completionTokens: json.usage.completion_tokens,
+          totalTokens: json.usage.total_tokens,
+        }
+      : undefined;
+
+    return {
+      content: choice.message.content,
+      toolCalls,
+      usage,
+      finishReason: choice.finish_reason,
+    };
+  }
+}
+```
+
+<Callout type="info">
+The built-in `AzureChatCompletionsModel` is a reference implementation. Use its source code as a guide for building your own — it covers SSE parsing, retry logic, abort signal handling, and error mapping.
+</Callout>
+
+## Using your custom model
+
+Custom models are passed anywhere the SDK accepts a `Model`. There is no registration step — just instantiate and use.
+
+### With an Agent and run()
+
+```ts title="custom-run.ts"
+import { Agent, run } from "stratus/core";
+
+const model = new OpenAIModel({
+  apiKey: process.env.OPENAI_API_KEY!,
+  model: "gpt-4o",
+});
+
+const agent = new Agent({
+  name: "assistant",
+  model,
+  instructions: "You are a helpful assistant.",
+});
+
+const result = await run(agent, "Hello!");
+console.log(result.output);
+```
+
+### With stream()
+
+```ts title="custom-stream.ts"
+import { Agent, stream } from "stratus/core";
+
+const { stream: events, result } = await stream(
+  agent,
+  "Explain quantum computing.",
+);
+
+for await (const event of events) {
+  if (event.type === "content_delta") {
+    process.stdout.write(event.content);
+  }
+}
+
+const final = await result;
+console.log(final.usage);
+```
+
+### With sessions
+
+```ts title="custom-session.ts"
+import { createSession } from "stratus/core";
+
+const session = createSession({
+  model,
+  instructions: "You are a helpful assistant.",
+  tools: [getWeather],
+});
+
+session.send("What's the weather in Paris?");
+for await (const event of session.stream()) {
+  if (event.type === "content_delta") {
+    process.stdout.write(event.content);
+  }
+}
+```
+
+### Override at call site
+
+You can also set a default model on the agent and override it per-call:
+
+```ts
+const agent = new Agent({
+  name: "assistant",
+  model: defaultModel,
+});
+
+// Use a different model for this specific run
+const result = await run(agent, "Hello", { model: otherModel });
+```
+
+## Next steps
+
+- [Tools](/docs/tools) — Give your custom model tool-calling capabilities
+- [Streaming](/docs/streaming) — Stream responses from any model provider
+- [Sessions](/docs/sessions) — Multi-turn conversations with persistent history
+- [Tracing](/docs/tracing) — Trace model calls for observability and debugging

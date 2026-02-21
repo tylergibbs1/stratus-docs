@@ -1,0 +1,192 @@
+---
+title: Multimodal Input
+description: Send images and mixed content to agents
+---
+
+Stratus supports multimodal input through `ContentPart` arrays. Send text, images, or both to any agent.
+
+- **Text parts** — `{ type: "text", text: "..." }`
+- **Image parts** — `{ type: "image_url", image_url: { url: "...", detail?: "auto" | "low" | "high" } }`
+
+## Sending an image
+
+Pass a `ChatMessage[]` array to `run()` with a `UserMessage` whose `content` is a `ContentPart[]`:
+
+```ts title="image-input.ts"
+import { Agent, run } from "stratus/core";
+import type { ChatMessage } from "stratus/core";
+
+const agent = new Agent({
+  name: "vision",
+  model,
+  instructions: "Describe what you see in the image.",
+});
+
+const messages: ChatMessage[] = [
+  {
+    role: "user",
+    content: [
+      {
+        type: "image_url",
+        image_url: { url: "https://example.com/photo.png" },
+      },
+    ],
+  },
+];
+
+const result = await run(agent, messages);
+console.log(result.output);
+```
+
+Base64 data URLs work the same way:
+
+```ts title="base64-image.ts"
+import { readFile } from "node:fs/promises";
+
+const buffer = await readFile("./chart.png");
+const dataUrl = `data:image/png;base64,${buffer.toString("base64")}`;
+
+const messages: ChatMessage[] = [
+  {
+    role: "user",
+    content: [
+      {
+        type: "image_url",
+        image_url: { url: dataUrl },
+      },
+    ],
+  },
+];
+
+const result = await run(agent, messages);
+```
+
+## Mixed text and images
+
+Combine text and image parts in a single message:
+
+```ts title="mixed-content.ts"
+import type { ContentPart } from "stratus/core";
+
+const parts: ContentPart[] = [
+  { type: "text", text: "Compare these two charts and summarize the differences." },
+  { type: "image_url", image_url: { url: "https://example.com/chart-q1.png" } },
+  { type: "image_url", image_url: { url: "https://example.com/chart-q2.png" } },
+];
+
+const messages: ChatMessage[] = [{ role: "user", content: parts }];
+
+const result = await run(agent, messages);
+console.log(result.output);
+```
+
+## Image detail levels
+
+The `detail` parameter controls how the model processes the image:
+
+| Level | Description |
+| --- | --- |
+| `"auto"` | The model decides based on image size (default) |
+| `"low"` | Fixed low-resolution processing. Faster and uses fewer tokens |
+| `"high"` | High-resolution processing with tiled analysis. More accurate for detailed images |
+
+Set the detail level on the `image_url` object:
+
+```ts title="detail-level.ts"
+const parts: ContentPart[] = [
+  { type: "text", text: "Read the fine print in this contract." },
+  {
+    type: "image_url",
+    image_url: {
+      url: "https://example.com/contract.png",
+      detail: "high", // [!code highlight]
+    },
+  },
+];
+```
+
+<Callout>
+Use `"low"` when you only need a general understanding of the image. It processes faster and consumes fewer tokens. Use `"high"` when fine details matter, such as reading text in screenshots or analyzing charts.
+</Callout>
+
+## With sessions
+
+`session.send()` accepts a `ContentPart[]` directly:
+
+```ts title="session-multimodal.ts"
+import { createSession } from "stratus/core";
+import type { ContentPart } from "stratus/core";
+
+const session = createSession({
+  model,
+  instructions: "You are a helpful vision assistant.",
+});
+
+const parts: ContentPart[] = [
+  { type: "text", text: "What is in this image?" },
+  { type: "image_url", image_url: { url: "https://example.com/photo.png" } },
+];
+
+session.send(parts); // [!code highlight]
+for await (const event of session.stream()) {
+  if (event.type === "content_delta") process.stdout.write(event.content);
+}
+```
+
+Follow-up messages can reference the image from the previous turn:
+
+```ts
+session.send("What colors are most prominent in that image?");
+for await (const event of session.stream()) {
+  if (event.type === "content_delta") process.stdout.write(event.content);
+}
+```
+
+## With `prompt()`
+
+`prompt()` also accepts `ContentPart[]` as input:
+
+```ts title="prompt-multimodal.ts"
+import { prompt } from "stratus/core";
+import type { ContentPart } from "stratus/core";
+
+const parts: ContentPart[] = [
+  { type: "text", text: "Describe this image in one sentence." },
+  { type: "image_url", image_url: { url: "https://example.com/sunset.png" } },
+];
+
+const result = await prompt(parts, { model });
+console.log(result.output);
+```
+
+<Callout type="info">
+Image support depends on the model deployment. Most gpt-5.x deployments support vision.
+</Callout>
+
+## ContentPart types
+
+```ts
+interface TextContentPart {
+  type: "text";
+  text: string;
+}
+
+interface ImageContentPart {
+  type: "image_url";
+  image_url: {
+    url: string;
+    detail?: "auto" | "low" | "high";
+  };
+}
+
+type ContentPart = TextContentPart | ImageContentPart;
+```
+
+`UserMessage.content` accepts either a plain `string` or a `ContentPart[]` array. When you pass a string, it behaves as a single text part.
+
+## Next steps
+
+- [Sessions](/docs/sessions) — Multi-turn conversations with persistent history
+- [Streaming](/docs/streaming) — Stream responses token by token
+- [Structured Output](/docs/structured-output) — Parse model output into typed objects
+- [Tools](/docs/tools) — Give agents the ability to call functions
