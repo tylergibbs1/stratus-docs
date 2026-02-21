@@ -15,9 +15,9 @@ Three ways to execute an agent. All handle the full tool loop, guardrails, hooks
 
 ```ts title="run.ts"
 import { Agent, run } from "stratus/core";
-import { AzureChatCompletionsModel } from "stratus";
+import { AzureResponsesModel } from "stratus";
 
-const model = new AzureChatCompletionsModel({
+const model = new AzureResponsesModel({
   endpoint: process.env.AZURE_ENDPOINT!,
   apiKey: process.env.AZURE_API_KEY!,
   deployment: "gpt-5.2",
@@ -50,7 +50,7 @@ If the agent has an `outputType`, `finalOutput` contains the parsed and validate
 | `messages` | `ChatMessage[]` | Full message history for the run, including system, user, assistant, and tool messages |
 | `usage` | `UsageInfo` | Accumulated token usage across all model calls in this run |
 | `lastAgent` | `Agent` | The agent that produced the final response (differs from the entry agent after a [handoff](/handoffs)) |
-| `finishReason` | `string?` | The model's finish reason from the last call (`"stop"`, `"tool_calls"`, etc.) |
+| `finishReason` | `FinishReason?` | The model's finish reason from the last call (`"stop"`, `"tool_calls"`, `"length"`, `"content_filter"`) |
 | `numTurns` | `number` | Number of model calls made during the run |
 | `totalCostUsd` | `number` | Estimated cost in USD (requires `costEstimator` in options, otherwise `0`) |
 

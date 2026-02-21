@@ -7,36 +7,12 @@ Stratus includes two built-in Azure OpenAI model implementations. Both implement
 
 | Model | API | Best for |
 | --- | --- | --- |
-| `AzureChatCompletionsModel` | Chat Completions | General use, widest compatibility |
-| `AzureResponsesModel` | Responses API | Newer API format, same capabilities |
-
-## AzureChatCompletionsModel
-
-Uses the Azure Chat Completions API (`/openai/deployments/{deployment}/chat/completions`).
-
-```ts title="chat-completions.ts"
-import { AzureChatCompletionsModel } from "stratus/azure";
-
-const model = new AzureChatCompletionsModel({
-  endpoint: "https://your-resource.openai.azure.com",
-  apiKey: "your-api-key",
-  deployment: "gpt-5.2",
-  apiVersion: "2025-03-01-preview", // optional, this is the default
-});
-```
-
-### Config Options
-
-| Property | Type | Description |
-| --- | --- | --- |
-| `endpoint` | `string` | **Required.** Azure OpenAI endpoint URL |
-| `apiKey` | `string` | **Required.** API key for authentication |
-| `deployment` | `string` | **Required.** Model deployment name |
-| `apiVersion` | `string` | API version (default: `"2025-03-01-preview"`) |
+| `AzureResponsesModel` | Responses API | **Recommended.** Latest API format with full feature support |
+| `AzureChatCompletionsModel` | Chat Completions | Legacy support, widest compatibility |
 
 ## AzureResponsesModel
 
-Uses the Azure Responses API (`/openai/responses`). The deployment name is sent as `model` in the request body rather than in the URL path.
+The recommended model for new projects. Uses the Azure Responses API.
 
 ```ts title="responses.ts"
 import { AzureResponsesModel } from "stratus/azure";
@@ -53,14 +29,58 @@ const model = new AzureResponsesModel({
 
 | Property | Type | Description |
 | --- | --- | --- |
-| `endpoint` | `string` | **Required.** Azure OpenAI endpoint URL |
+| `endpoint` | `string` | **Required.** Any [supported endpoint format](#endpoint-formats) |
 | `apiKey` | `string` | **Required.** API key for authentication |
 | `deployment` | `string` | **Required.** Sent as `model` in request body |
 | `apiVersion` | `string` | API version (default: `"2025-04-01-preview"`) |
 
+## AzureChatCompletionsModel
+
+Uses the Azure Chat Completions API. Use this if your deployment doesn't support the Responses API.
+
+```ts title="chat-completions.ts"
+import { AzureChatCompletionsModel } from "stratus/azure";
+
+const model = new AzureChatCompletionsModel({
+  endpoint: "https://your-resource.openai.azure.com",
+  apiKey: "your-api-key",
+  deployment: "gpt-5.2",
+  apiVersion: "2025-03-01-preview", // optional, this is the default
+});
+```
+
+### Config Options
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `endpoint` | `string` | **Required.** Any [supported endpoint format](#endpoint-formats) |
+| `apiKey` | `string` | **Required.** API key for authentication |
+| `deployment` | `string` | **Required.** Model deployment name |
+| `apiVersion` | `string` | API version (default: `"2025-03-01-preview"`) |
+
 <Callout type="info">
 Both models are interchangeable. Swap one for the other without changing any agent, tool, or session code.
 </Callout>
+
+## Endpoint Formats
+
+Pass any Azure endpoint URL as `endpoint` — the SDK auto-detects the type and builds the correct request URL.
+
+```ts
+// Azure OpenAI
+endpoint: "https://your-resource.openai.azure.com"
+
+// Cognitive Services
+endpoint: "https://your-resource.cognitiveservices.azure.com"
+
+// AI Foundry project
+endpoint: "https://your-project.services.ai.azure.com/api/projects/my-project"
+
+// Full URL (used as-is, deployment and apiVersion are ignored)
+endpoint: "https://your-resource.openai.azure.com/openai/deployments/gpt-5.2/chat/completions?api-version=2025-03-01-preview"
+```
+
+Trailing slashes are normalized automatically.
 
 ## Usage
 
@@ -114,7 +134,7 @@ interface ModelResponse {
   content: string | null;
   toolCalls: ToolCall[];
   usage?: UsageInfo;
-  finishReason?: string; // [!code highlight]
+  finishReason?: FinishReason; // [!code highlight]
 }
 ```
 

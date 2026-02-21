@@ -26,9 +26,9 @@ You need an Azure OpenAI resource with a deployed model. You'll need:
 ## Create a Model
 
 ```ts title="model.ts"
-import { AzureChatCompletionsModel } from "stratus";
+import { AzureResponsesModel } from "stratus";
 
-const model = new AzureChatCompletionsModel({
+const model = new AzureResponsesModel({
   endpoint: process.env.AZURE_ENDPOINT!,
   apiKey: process.env.AZURE_API_KEY!,
   deployment: "gpt-5.2",

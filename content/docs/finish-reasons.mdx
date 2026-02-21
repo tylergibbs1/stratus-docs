@@ -53,7 +53,7 @@ Model response
 ```
 
 <Callout type="info">
-The `content_filter` finish reason is intercepted at the model layer before the run loop sees it. `AzureChatCompletionsModel` throws a `ContentFilterError` immediately, so the run loop never receives a response with `finishReason: "content_filter"`.
+The `content_filter` finish reason is intercepted at the model layer before the run loop sees it. Both `AzureResponsesModel` and `AzureChatCompletionsModel` throw a `ContentFilterError` immediately, so the run loop never receives a response with `finishReason: "content_filter"`.
 </Callout>
 
 ## Accessing finishReason

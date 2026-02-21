@@ -61,11 +61,11 @@ The goal: clean, typed, zero-config for the common case - while properly wrappin
 ## Quick Example
 
 ```ts title="weather-agent.ts"
-import { AzureChatCompletionsModel } from "stratus";
+import { AzureResponsesModel } from "stratus";
 import { createSession, tool } from "stratus/core";
 import { z } from "zod";
 
-const model = new AzureChatCompletionsModel({
+const model = new AzureResponsesModel({
   endpoint: process.env.AZURE_ENDPOINT!,
   apiKey: process.env.AZURE_API_KEY!,
   deployment: "gpt-5.2",

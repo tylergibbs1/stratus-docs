@@ -213,7 +213,7 @@ export class OpenAIModel implements Model {
     // Parse SSE stream, accumulate content and tool calls,
     // yield content_delta / tool_call_start / tool_call_delta events,
     // then yield tool_call_done for each tool call and a final done event.
-    // See AzureChatCompletionsModel source for a complete SSE implementation.
+    // See AzureResponsesModel source for a complete SSE implementation.
 
     let content = "";
     const toolCalls: ToolCall[] = [];
@@ -278,7 +278,7 @@ export class OpenAIModel implements Model {
 ```
 
 <Callout type="info">
-The built-in `AzureChatCompletionsModel` is a reference implementation. Use its source code as a guide for building your own - it covers SSE parsing, retry logic, abort signal handling, and error mapping.
+The built-in `AzureResponsesModel` is a reference implementation. Use its source code as a guide for building your own - it covers SSE parsing, retry logic, abort signal handling, and error mapping.
 </Callout>
 
 ## Using your custom model

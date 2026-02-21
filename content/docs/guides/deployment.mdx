@@ -35,10 +35,10 @@ Choose a pattern based on how your agents interact with users.
 Each HTTP request creates a fresh `run()` with no prior history. Best for one-off tasks like classification, extraction, or single-turn Q&A.
 
 ```ts title="ephemeral.ts"
-import { AzureChatCompletionsModel } from "stratus";
+import { AzureResponsesModel } from "stratus";
 import { Agent, run } from "stratus/core";
 
-const model = new AzureChatCompletionsModel({
+const model = new AzureResponsesModel({
   endpoint: process.env.AZURE_ENDPOINT!,
   apiKey: process.env.AZURE_API_KEY!,
   deployment: "gpt-5.2",
@@ -69,10 +69,10 @@ async function handleRequest(message: string) {
 Use `createSession()` for multi-turn conversations where the process stays alive. Best for chat applications, interactive assistants, and WebSocket servers.
 
 ```ts title="persistent.ts"
-import { AzureChatCompletionsModel } from "stratus";
+import { AzureResponsesModel } from "stratus";
 import { createSession } from "stratus/core";
 
-const model = new AzureChatCompletionsModel({
+const model = new AzureResponsesModel({
   endpoint: process.env.AZURE_ENDPOINT!,
   apiKey: process.env.AZURE_API_KEY!,
   deployment: "gpt-5.2",
@@ -120,11 +120,11 @@ async function handleMessage(userId: string, message: string) {
 Use `save()` and `resumeSession()` to persist conversations across process restarts, deployments, or server instances. Best for workflows that span multiple sessions or need durability.
 
 ```ts title="hybrid.ts"
-import { AzureChatCompletionsModel } from "stratus";
+import { AzureResponsesModel } from "stratus";
 import { createSession, resumeSession } from "stratus/core";
 import type { SessionSnapshot } from "stratus/core";
 
-const model = new AzureChatCompletionsModel({
+const model = new AzureResponsesModel({
   endpoint: process.env.AZURE_ENDPOINT!,
   apiKey: process.env.AZURE_API_KEY!,
   deployment: "gpt-5.2",
@@ -189,10 +189,10 @@ Wrap a Stratus agent in an HTTP endpoint that streams responses as Server-Sent E
 ```ts title="server.ts"
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import { AzureChatCompletionsModel } from "stratus";
+import { AzureResponsesModel } from "stratus";
 import { Agent, stream, RunAbortedError } from "stratus/core";
 
-const model = new AzureChatCompletionsModel({
+const model = new AzureResponsesModel({
   endpoint: process.env.AZURE_ENDPOINT!,
   apiKey: process.env.AZURE_API_KEY!,
   deployment: "gpt-5.2",
@@ -271,10 +271,10 @@ export default app;
 
 ```ts title="server.ts"
 import express from "express";
-import { AzureChatCompletionsModel } from "stratus";
+import { AzureResponsesModel } from "stratus";
 import { Agent, stream, RunAbortedError } from "stratus/core";
 
-const model = new AzureChatCompletionsModel({
+const model = new AzureResponsesModel({
   endpoint: process.env.AZURE_ENDPOINT!,
   apiKey: process.env.AZURE_API_KEY!,
   deployment: "gpt-5.2",
