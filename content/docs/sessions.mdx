@@ -1,0 +1,225 @@
+---
+title: Sessions
+description: Multi-turn conversations with persistent message history
+---
+
+Sessions provide a high-level API for multi-turn conversations. Messages persist across `send()`/`stream()` cycles, so the model sees the full conversation history on every turn.
+
+## Creating a Session
+
+```ts
+import { createSession } from "stratus/core";
+
+const session = createSession({
+  model,
+  instructions: "You are a weather assistant.",
+  tools: [getWeather],
+});
+```
+
+## Send and Stream
+
+The session API follows a simple two-step pattern:
+
+1. **`send(message)`** — Queue a user message (synchronous, no API call)
+2. **`stream()`** — Run the agent loop, yielding streaming events
+
+```ts
+session.send("What's the weather in NYC?");
+for await (const event of session.stream()) {
+  if (event.type === "content_delta") {
+    process.stdout.write(event.content);
+  }
+}
+```
+
+## Multi-Turn
+
+Just call `send()` and `stream()` again. Previous messages are automatically included:
+
+```ts
+session.send("What's the weather in NYC?");
+for await (const event of session.stream()) {
+  if (event.type === "content_delta") process.stdout.write(event.content);
+}
+
+// The model sees the full conversation so far
+session.send("What about London?");
+for await (const event of session.stream()) {
+  if (event.type === "content_delta") process.stdout.write(event.content);
+}
+```
+
+## Multimodal Messages
+
+`send()` accepts either a string or a `ContentPart[]` array for multimodal input:
+
+```ts
+import type { ContentPart } from "stratus/core";
+
+const parts: ContentPart[] = [
+  { type: "text", text: "What is in this image?" },
+  { type: "image_url", image_url: { url: "https://example.com/photo.png" } },
+];
+
+session.send(parts);
+for await (const event of session.stream()) {
+  if (event.type === "content_delta") process.stdout.write(event.content);
+}
+```
+
+Content part types:
+
+| Type | Fields | Description |
+| --- | --- | --- |
+| `TextContentPart` | `type: "text"`, `text: string` | A text segment |
+| `ImageContentPart` | `type: "image_url"`, `image_url: { url, detail? }` | An image URL with optional detail level (`"auto"`, `"low"`, `"high"`) |
+
+The `prompt()` function also accepts `ContentPart[]`:
+
+```ts
+const result = await prompt(parts, { model });
+```
+
+## Accessing Results
+
+After consuming the stream, access the result via `session.result`:
+
+```ts
+session.send("Summarize our conversation.");
+for await (const event of session.stream()) { /* ... */ }
+
+const result = await session.result;
+console.log(result.output);        // Raw string output
+console.log(result.finishReason);   // "stop", "tool_calls", etc.
+console.log(result.usage);          // Token usage across this turn
+console.log(result.lastAgent);      // Agent that handled this turn
+```
+
+## Message History
+
+Access the accumulated conversation history at any time:
+
+```ts
+const messages = session.messages;
+// Returns a copy — mutating it won't affect the session
+```
+
+Messages include all user, assistant, and tool messages from previous turns. System messages are managed internally and not included.
+
+## Save, Resume, and Fork
+
+Sessions can be saved to a snapshot and resumed or forked later. This enables persistence, branching conversations, and recovery from failures.
+
+### Saving
+
+```ts
+const snapshot = session.save();
+// snapshot.id — same as session.id
+// snapshot.messages — deep copy of the conversation history
+```
+
+`save()` throws if the session is closed or currently streaming.
+
+### Resuming
+
+Resume a session with the same ID and conversation history:
+
+```ts
+import { resumeSession } from "stratus/core";
+
+const session2 = resumeSession(snapshot, {
+  model,
+  instructions: "You are a helpful assistant.",
+});
+
+// session2.id === snapshot.id
+// Model sees the full previous conversation
+session2.send("Continue where we left off.");
+for await (const event of session2.stream()) { /* ... */ }
+```
+
+### Forking
+
+Fork creates a new session (new ID) with a copy of the conversation history, enabling branching:
+
+```ts
+import { forkSession } from "stratus/core";
+
+const forked = forkSession(snapshot, {
+  model,
+  instructions: "You are a helpful assistant.",
+});
+
+// forked.id !== snapshot.id
+// forked has a copy of the messages — changes don't affect the original
+forked.send("Take a different direction.");
+for await (const event of forked.stream()) { /* ... */ }
+```
+
+## Abort Signal
+
+Pass an `AbortSignal` to `stream()` to cancel a running turn:
+
+```ts
+const ac = new AbortController();
+
+session.send("Write a very long essay.");
+try {
+  for await (const event of session.stream({ signal: ac.signal })) {
+    if (event.type === "content_delta") process.stdout.write(event.content);
+  }
+} catch (error) {
+  if (error instanceof RunAbortedError) {
+    console.log("Stream was cancelled");
+  }
+}
+```
+
+The signal is per-invocation, not per-session. See [Streaming — Abort Signal](/docs/streaming#abort-signal) for details.
+
+## Cleanup
+
+Sessions support both explicit cleanup and `await using`:
+
+```ts
+// Explicit
+session.close();
+
+// Automatic via Symbol.asyncDispose
+await using session = createSession({ model });
+// session.close() is called automatically when the block exits
+```
+
+After closing, `send()`, `stream()`, and `save()` will throw.
+
+## One-Shot with `prompt()`
+
+For single-turn use cases, `prompt()` is a convenience that creates a session, sends a message, drains the stream, and returns the result:
+
+```ts
+import { prompt } from "stratus/core";
+
+const result = await prompt("What is 2 + 2?", { model });
+console.log(result.output); // "4"
+```
+
+## Session Config
+
+`SessionConfig` accepts the same options as `AgentConfig` (except `name`), plus `context` and `maxTurns`:
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `model` | `Model` | **Required.** The LLM model |
+| `instructions` | `Instructions` | System prompt |
+| `tools` | `FunctionTool[]` | Available tools |
+| `subagents` | `SubAgent[]` | [Sub-agents](/docs/subagents) that run as tool calls |
+| `modelSettings` | `ModelSettings` | Temperature, max tokens, etc. |
+| `outputType` | `z.ZodType` | Structured output schema |
+| `handoffs` | `HandoffInput[]` | Handoff targets |
+| `inputGuardrails` | `InputGuardrail[]` | Input guardrails |
+| `outputGuardrails` | `OutputGuardrail[]` | Output guardrails |
+| `hooks` | `AgentHooks` | Lifecycle hooks |
+| `toolUseBehavior` | `ToolUseBehavior` | Post-tool-call behavior |
+| `context` | `TContext` | Shared context object |
+| `maxTurns` | `number` | Max model calls per `stream()` (default: 10) |

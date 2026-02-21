@@ -1,0 +1,118 @@
+---
+title: Errors
+description: Error types and handling
+---
+
+Stratus defines specific error classes for different failure modes. All errors extend `StratusError`.
+
+## Error Hierarchy
+
+```
+StratusError
+├── MaxTurnsExceededError
+├── RunAbortedError
+├── ModelError
+│   └── ContentFilterError
+├── OutputParseError
+├── InputGuardrailTripwireTriggered
+└── OutputGuardrailTripwireTriggered
+```
+
+## StratusError
+
+Base class for all Stratus errors.
+
+```ts
+import { StratusError } from "stratus/core";
+
+try {
+  await run(agent, input);
+} catch (error) {
+  if (error instanceof StratusError) {
+    console.error("Stratus error:", error.message);
+  }
+}
+```
+
+## MaxTurnsExceededError
+
+Thrown when the agent loop exceeds `maxTurns` without producing a final response.
+
+## RunAbortedError
+
+Thrown when a run is cancelled via an `AbortSignal`. See [Streaming — Abort Signal](/docs/streaming#abort-signal).
+
+```ts
+import { RunAbortedError } from "stratus/core";
+
+const ac = new AbortController();
+setTimeout(() => ac.abort(), 5000);
+
+try {
+  await run(agent, input, { signal: ac.signal });
+} catch (error) {
+  if (error instanceof RunAbortedError) {
+    console.log("Run was cancelled");
+  }
+}
+```
+
+```ts
+import { MaxTurnsExceededError } from "stratus/core";
+
+try {
+  await run(agent, input, { maxTurns: 3 });
+} catch (error) {
+  if (error instanceof MaxTurnsExceededError) {
+    console.error("Agent exceeded max turns");
+  }
+}
+```
+
+## ModelError
+
+Thrown when the model API returns an error. Includes optional `status` and `code` fields:
+
+```ts
+import { ModelError } from "stratus/core";
+
+try {
+  await run(agent, input);
+} catch (error) {
+  if (error instanceof ModelError) {
+    console.error(`Model error ${error.status}: ${error.message}`);
+  }
+}
+```
+
+## ContentFilterError
+
+A subclass of `ModelError` thrown when Azure's content filter blocks a request or response.
+
+```ts
+import { ContentFilterError } from "stratus/core";
+
+try {
+  await run(agent, input);
+} catch (error) {
+  if (error instanceof ContentFilterError) {
+    console.error("Content was filtered by Azure");
+  }
+}
+```
+
+## OutputParseError
+
+Thrown when structured output fails to parse. See [Structured Output](/docs/structured-output).
+
+## InputGuardrailTripwireTriggered
+
+Thrown when an input guardrail's tripwire fires. See [Guardrails](/docs/guardrails).
+
+Properties:
+- `guardrailName: string` — Which guardrail fired
+- `outputInfo?: unknown` — Optional metadata from the guardrail
+
+## OutputGuardrailTripwireTriggered
+
+Thrown when an output guardrail's tripwire fires. Same properties as the input variant.

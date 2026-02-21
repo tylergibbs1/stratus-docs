@@ -1,0 +1,122 @@
+---
+title: Subagents
+description: Delegate work to child agents as tool calls
+---
+
+Subagents let a parent agent delegate work to a child agent. The child runs as a tool call — the parent sends parameters, the child runs its own agent loop, and the result comes back as a tool message.
+
+## Defining a Subagent
+
+```ts
+import { Agent, subagent } from "stratus/core";
+import { z } from "zod";
+
+const mathAgent = new Agent({
+  name: "math",
+  model,
+  instructions: "You are a math expert. Solve the given problem.",
+  tools: [calculate],
+});
+
+const mathSubagent = subagent({
+  agent: mathAgent,
+  inputSchema: z.object({
+    problem: z.string().describe("The math problem to solve"),
+  }),
+  mapInput: (params) => params.problem,
+});
+```
+
+## Using Subagents
+
+Add subagents to a parent agent's `subagents` array. They appear as tools to the model:
+
+```ts
+const assistant = new Agent({
+  name: "assistant",
+  model,
+  instructions: "Use the math subagent for math questions.",
+  subagents: [mathSubagent],
+});
+
+const result = await run(assistant, "What is 15 * 17?");
+// The parent delegates to the math agent, which uses the calculate tool
+console.log(result.output); // Contains "255"
+```
+
+## Subagent Config
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `agent` | `Agent` | **Required.** The child agent to delegate to |
+| `inputSchema` | `z.ZodType` | **Required.** Zod schema for parameters the parent model passes |
+| `mapInput` | `(params) => string` | **Required.** Convert parsed params to the child's user message |
+| `toolName` | `string` | Custom tool name (default: `run_{agent.name}`) |
+| `toolDescription` | `string` | Custom description for the model |
+| `mapContext` | `(parentCtx) => childCtx` | Map the parent's context to the child's context type |
+| `maxTurns` | `number` | Max turns for the child run |
+| `model` | `Model` | Override the child's model |
+
+## Context Mapping
+
+If the child agent has a different context type, use `mapContext` to transform it:
+
+```ts
+const childSubagent = subagent({
+  agent: childAgent, // Agent<{ apiKey: string }>
+  inputSchema: z.object({ query: z.string() }),
+  mapInput: (params) => params.query,
+  mapContext: (parentCtx: { config: { key: string } }) => ({
+    apiKey: parentCtx.config.key,
+  }),
+});
+```
+
+## Error Handling
+
+If the child agent throws an error, it's caught and returned as a tool message to the parent. This lets the parent recover gracefully:
+
+```ts
+// If the child fails, the parent sees:
+// "Error in sub-agent "math": Agent exceeded maximum turns (10)"
+```
+
+## Subagents in Sessions
+
+```ts
+const session = createSession({
+  model,
+  instructions: "Delegate math to the math subagent.",
+  subagents: [mathSubagent],
+});
+
+session.send("What is 2^10?");
+for await (const event of session.stream()) {
+  if (event.type === "content_delta") process.stdout.write(event.content);
+}
+```
+
+## Tracing
+
+Subagent executions are recorded as `"subagent"` span type in traces:
+
+```ts
+const { result, trace } = await withTrace("my_trace", () =>
+  run(assistant, "What is 99 * 99?")
+);
+
+const subagentSpans = trace.spans
+  .flatMap((s) => [s, ...s.children])
+  .filter((s) => s.type === "subagent");
+
+console.log(subagentSpans[0].name); // "subagent:math"
+```
+
+## Subagents vs Handoffs
+
+| | Subagents | Handoffs |
+| --- | --- | --- |
+| **Control flow** | Parent keeps control; child result comes back | Control transfers to the child permanently |
+| **Use case** | Delegate a subtask, get the answer back | Route the conversation to a specialist |
+| **Message history** | Child gets a fresh message history | Child inherits the full message history |
+| **Result** | Child's output becomes a tool message | Child's output becomes the final output |

@@ -1,0 +1,125 @@
+---
+title: Azure OpenAI
+description: Configure the Azure Chat Completions model
+---
+
+Stratus includes a built-in Azure OpenAI Chat Completions implementation with streaming support via a zero-dependency SSE parser.
+
+## Configuration
+
+```ts
+import { AzureChatCompletionsModel } from "stratus";
+
+const model = new AzureChatCompletionsModel({
+  endpoint: "https://your-resource.openai.azure.com",
+  apiKey: "your-api-key",
+  deployment: "gpt-4o",
+  apiVersion: "2025-03-01-preview", // optional, this is the default
+});
+```
+
+### Config Options
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `endpoint` | `string` | **Required.** Azure OpenAI endpoint URL |
+| `apiKey` | `string` | **Required.** API key for authentication |
+| `deployment` | `string` | **Required.** Model deployment name |
+| `apiVersion` | `string` | API version (default: `"2025-03-01-preview"`) |
+
+## Usage
+
+The model implements the `Model` interface and works with all Stratus APIs:
+
+```ts
+// With run()
+const result = await run(agent, "Hello", { model });
+
+// With createSession()
+const session = createSession({ model, instructions: "..." });
+
+// With prompt()
+const result = await prompt("Hello", { model });
+```
+
+## Model Interface
+
+Any model provider can be used with Stratus by implementing the `Model` interface:
+
+```ts
+interface Model {
+  getResponse(request: ModelRequest, options?: ModelRequestOptions): Promise<ModelResponse>;
+  getStreamedResponse(request: ModelRequest, options?: ModelRequestOptions): AsyncIterable<StreamEvent>;
+}
+
+interface ModelRequestOptions {
+  signal?: AbortSignal;
+}
+```
+
+The `options` parameter is optional and backward compatible. When provided, `signal` is used for request cancellation.
+
+### ModelRequest
+
+```ts
+interface ModelRequest {
+  messages: ChatMessage[];
+  tools?: ToolDefinition[];
+  modelSettings?: ModelSettings;
+  responseFormat?: ResponseFormat;
+}
+```
+
+### ModelResponse
+
+```ts
+interface ModelResponse {
+  content: string | null;
+  toolCalls: ToolCall[];
+  usage?: UsageInfo;
+  finishReason?: string;
+}
+```
+
+### UsageInfo
+
+```ts
+interface UsageInfo {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
+}
+```
+
+Cache token fields are populated when the Azure API returns `prompt_tokens_details.cached_tokens`. They're `undefined` when caching is not active.
+
+## Authentication
+
+The Azure implementation uses `api-key` header authentication. The API key is sent as a header with every request.
+
+## Streaming
+
+The `getStreamedResponse` method uses Server-Sent Events (SSE) with a zero-dependency parser. Events are yielded as `StreamEvent` objects as they arrive from the Azure API.
+
+## Error Handling
+
+The Azure model throws specific errors for different failure modes:
+
+- **`ModelError`** — General API errors (4xx/5xx responses)
+- **`ContentFilterError`** — Azure content filter blocked the request or response
+
+```ts
+import { ModelError, ContentFilterError } from "stratus/core";
+
+try {
+  const result = await run(agent, input);
+} catch (error) {
+  if (error instanceof ContentFilterError) {
+    // Handle content filter
+  } else if (error instanceof ModelError) {
+    console.error(`API error ${error.status}: ${error.message}`);
+  }
+}
+```

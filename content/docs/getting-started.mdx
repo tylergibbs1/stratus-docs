@@ -1,0 +1,95 @@
+---
+title: Getting Started
+description: Install Stratus and run your first agent
+---
+
+## Installation
+
+```bash tab="bun"
+bun add stratus zod
+```
+
+```bash tab="npm"
+npm install stratus zod
+```
+
+[Zod](https://zod.dev) is a peer dependency used for tool parameter schemas and structured output.
+
+## Prerequisites
+
+You need an Azure OpenAI resource with a deployed model. You'll need:
+
+- **Endpoint** — Your Azure OpenAI endpoint URL
+- **API Key** — An API key for authentication
+- **Deployment** — The name of your deployed model (e.g. `gpt-4o`)
+
+## Create a Model
+
+```ts
+import { AzureChatCompletionsModel } from "stratus";
+
+const model = new AzureChatCompletionsModel({
+  endpoint: process.env.AZURE_ENDPOINT!,
+  apiKey: process.env.AZURE_API_KEY!,
+  deployment: "gpt-4o",
+});
+```
+
+## One-Shot with `prompt()`
+
+The simplest way to use Stratus is the `prompt()` function — send a message and get a result:
+
+```ts
+import { prompt } from "stratus/core";
+
+const result = await prompt("What is 2 + 2?", { model });
+console.log(result.output); // "4"
+```
+
+## Session-Based Conversations
+
+For multi-turn conversations, use `createSession()`:
+
+```ts
+import { createSession } from "stratus/core";
+
+await using session = createSession({
+  model,
+  instructions: "You are a helpful assistant.",
+});
+
+session.send("Hello!");
+for await (const event of session.stream()) {
+  if (event.type === "content_delta") process.stdout.write(event.content);
+}
+
+// Send another message — previous context is preserved
+session.send("What did I just say?");
+for await (const event of session.stream()) {
+  if (event.type === "content_delta") process.stdout.write(event.content);
+}
+```
+
+## Agent-Based with `run()`
+
+For lower-level control, create an `Agent` and use `run()` or `stream()` directly:
+
+```ts
+import { Agent, run } from "stratus/core";
+
+const agent = new Agent({
+  name: "assistant",
+  model,
+  instructions: "You are a helpful assistant.",
+});
+
+const result = await run(agent, "What is the capital of France?");
+console.log(result.output); // "The capital of France is Paris."
+```
+
+## Next Steps
+
+- [Agents](/docs/agents) — Configure agents with instructions and model settings
+- [Tools](/docs/tools) — Give agents the ability to call functions
+- [Sessions](/docs/sessions) — Multi-turn conversation management
+- [Streaming](/docs/streaming) — Real-time response streaming

@@ -1,0 +1,132 @@
+---
+title: Handoffs
+description: Route conversations between specialized agents
+---
+
+Handoffs let one agent transfer a conversation to another agent mid-turn. This enables multi-agent architectures like triage → specialist routing.
+
+## Basic Handoff
+
+Pass agents directly to `handoffs`. Stratus auto-generates a tool named `transfer_to_{agent_name}`:
+
+```ts
+import { Agent, run } from "stratus/core";
+
+const mathAgent = new Agent({
+  name: "math",
+  model,
+  instructions: "You are a math expert. Solve math problems.",
+});
+
+const triageAgent = new Agent({
+  name: "triage",
+  model,
+  instructions: "Route the user to the right specialist.",
+  handoffs: [mathAgent],
+});
+
+const result = await run(triageAgent, "What is the integral of x^2?");
+console.log(result.lastAgent.name); // "math"
+```
+
+## Custom Handoff Configuration
+
+Use the `handoff()` function for more control:
+
+```ts
+import { handoff } from "stratus/core";
+
+const agent = new Agent({
+  name: "triage",
+  model,
+  handoffs: [
+    handoff({
+      agent: mathAgent,
+      toolName: "escalate_to_math",
+      toolDescription: "Escalate complex math problems to the math specialist",
+      onHandoff: async (ctx) => {
+        console.log("Handing off to math agent");
+        await logHandoff(ctx, "math");
+      },
+    }),
+  ],
+});
+```
+
+### Handoff Config Options
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `agent` | `Agent` | **Required.** The target agent |
+| `toolName` | `string` | Custom tool name (default: `transfer_to_{name}`) |
+| `toolDescription` | `string` | Custom description for the model |
+| `onHandoff` | `(ctx) => void` | Callback that fires when the handoff executes |
+
+## How Handoffs Work
+
+1. The handoff is registered as a tool definition alongside the agent's other tools
+2. When the model calls the handoff tool, Stratus executes `onHandoff` (if provided)
+3. The current agent is replaced with the handoff target agent
+4. The system prompt is swapped to the new agent's instructions
+5. The model loop continues with the new agent
+
+## Handoffs in Sessions
+
+```ts
+const session = createSession({
+  model,
+  instructions: "Route users to the right specialist.",
+  handoffs: [mathAgent, writingAgent],
+});
+
+session.send("Help me write a poem");
+for await (const event of session.stream()) {
+  if (event.type === "content_delta") process.stdout.write(event.content);
+}
+
+const result = await session.result;
+console.log(result.lastAgent.name); // "writing"
+```
+
+Note: Each `stream()` call starts from the session's configured agent. Handoffs within a turn don't persist to the next turn.
+
+## Multi-Agent Patterns
+
+### Triage Pattern
+
+A triage agent routes to specialists based on the user's request:
+
+```ts
+const orderAgent = new Agent({
+  name: "orders",
+  model,
+  instructions: "Help with order lookups and status.",
+  tools: [lookupOrder],
+});
+
+const refundAgent = new Agent({
+  name: "refunds",
+  model,
+  instructions: "Process refund requests.",
+  tools: [processRefund],
+});
+
+const triage = new Agent({
+  name: "triage",
+  model,
+  instructions: "You are a customer support triage agent.",
+  handoffs: [orderAgent, refundAgent],
+});
+```
+
+### Handoff Description
+
+Set `handoffDescription` on agents to help the triage agent decide:
+
+```ts
+const orderAgent = new Agent({
+  name: "orders",
+  model,
+  handoffDescription: "Transfer to this agent for order status and tracking",
+});
+```

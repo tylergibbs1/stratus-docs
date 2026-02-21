@@ -1,0 +1,178 @@
+---
+title: Hooks
+description: Lifecycle callbacks for observability and permission control
+---
+
+Hooks let you run custom code at key points in the agent lifecycle. Use them for logging, metrics, auditing, or permission control.
+
+## Available Hooks
+
+| Hook | When it fires |
+| --- | --- |
+| `beforeRun` | Before the first model call |
+| `afterRun` | After the final result is produced |
+| `beforeToolCall` | Before a tool's `execute` function runs |
+| `afterToolCall` | After a tool's `execute` function returns |
+| `beforeHandoff` | Before switching to a handoff agent |
+
+## Usage
+
+```ts
+import { Agent } from "stratus/core";
+
+const agent = new Agent({
+  name: "assistant",
+  model,
+  hooks: {
+    beforeRun: async ({ agent, input, context }) => {
+      console.log(`Starting ${agent.name} with: ${input}`);
+    },
+    afterRun: async ({ agent, result, context }) => {
+      console.log(`${agent.name} finished: ${result.output}`);
+    },
+    beforeToolCall: async ({ agent, toolCall, context }) => {
+      console.log(`Calling tool: ${toolCall.function.name}`);
+    },
+    afterToolCall: async ({ agent, toolCall, result, context }) => {
+      console.log(`Tool ${toolCall.function.name} returned: ${result}`);
+    },
+    beforeHandoff: async ({ fromAgent, toAgent, context }) => {
+      console.log(`Handoff: ${fromAgent.name} → ${toAgent.name}`);
+    },
+  },
+});
+```
+
+## Permission Control
+
+`beforeToolCall` and `beforeHandoff` can return a decision object to allow, deny, or modify the action. Returning `void` (or not returning anything) is treated as "allow", so existing hooks are fully backward compatible.
+
+### Tool Call Decisions
+
+`beforeToolCall` can return a `ToolCallDecision`:
+
+```ts
+type ToolCallDecision =
+  | { decision: "allow" }
+  | { decision: "deny"; reason?: string }
+  | { decision: "modify"; modifiedParams: Record<string, unknown> };
+```
+
+#### Deny a tool call
+
+When denied, the tool's `execute` function is skipped. The `reason` is returned to the model as the tool message, and `afterToolCall` does not fire.
+
+```ts
+hooks: {
+  beforeToolCall: ({ toolCall, context }) => {
+    if (toolCall.function.name === "delete_user" && !context.isAdmin) {
+      return { decision: "deny", reason: "Admin access required" };
+    }
+  },
+}
+```
+
+If no `reason` is provided, a default message like `Tool call "delete_user" was denied` is used.
+
+#### Modify tool parameters
+
+When modified, the `modifiedParams` are passed to the tool instead of the original parsed arguments. `afterToolCall` still fires.
+
+```ts
+hooks: {
+  beforeToolCall: ({ toolCall }) => {
+    if (toolCall.function.name === "search") {
+      return {
+        decision: "modify",
+        modifiedParams: { query: "safe version of the query" },
+      };
+    }
+  },
+}
+```
+
+### Handoff Decisions
+
+`beforeHandoff` can return a `HandoffDecision`:
+
+```ts
+type HandoffDecision =
+  | { decision: "allow" }
+  | { decision: "deny"; reason?: string };
+```
+
+When denied, the agent switch is blocked — `result.lastAgent` remains the current agent. The denial `reason` is returned as the tool message.
+
+```ts
+hooks: {
+  beforeHandoff: ({ toAgent, context }) => {
+    if (toAgent.name === "admin_agent" && !context.isAdmin) {
+      return { decision: "deny", reason: "Admin agent access denied" };
+    }
+  },
+}
+```
+
+## Hook Signatures
+
+```ts
+interface AgentHooks<TContext> {
+  beforeRun?: (params: {
+    agent: Agent<TContext, any>;
+    input: string;
+    context: TContext;
+  }) => void | Promise<void>;
+
+  afterRun?: (params: {
+    agent: Agent<TContext, any>;
+    result: RunResult<any>;
+    context: TContext;
+  }) => void | Promise<void>;
+
+  beforeToolCall?: (params: {
+    agent: Agent<TContext, any>;
+    toolCall: ToolCall;
+    context: TContext;
+  }) => void | ToolCallDecision | Promise<void | ToolCallDecision>;
+
+  afterToolCall?: (params: {
+    agent: Agent<TContext, any>;
+    toolCall: ToolCall;
+    result: string;
+    context: TContext;
+  }) => void | Promise<void>;
+
+  beforeHandoff?: (params: {
+    fromAgent: Agent<TContext, any>;
+    toAgent: Agent<TContext, any>;
+    context: TContext;
+  }) => void | HandoffDecision | Promise<void | HandoffDecision>;
+}
+```
+
+## Hooks in Sessions
+
+```ts
+const session = createSession({
+  model,
+  hooks: {
+    beforeRun: async ({ input }) => {
+      await logToAnalytics("user_message", input);
+    },
+    afterRun: async ({ result }) => {
+      await logToAnalytics("agent_response", result.output);
+    },
+  },
+});
+```
+
+## Execution Details
+
+- All hooks are optional — only define what you need
+- `beforeRun` and `afterRun` fire on the **entry agent** (the agent passed to `run()` or created by the session)
+- `beforeToolCall` and `afterToolCall` fire on the **current agent** (which may change after handoffs)
+- `beforeHandoff` fires on the agent performing the handoff (the "from" agent)
+- Hooks are `async`-compatible — return a promise if you need to await
+- Returning `void` from `beforeToolCall`/`beforeHandoff` is treated as "allow" (backward compatible)
+- When `beforeToolCall` returns `{ decision: "deny" }`, `afterToolCall` is **not** called
+- When `beforeToolCall` returns `{ decision: "modify" }`, `afterToolCall` **is** called with the modified result

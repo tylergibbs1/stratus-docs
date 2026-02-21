@@ -1,0 +1,167 @@
+---
+title: Streaming
+description: Real-time streaming of model responses
+---
+
+Stratus supports streaming at every level — sessions, `stream()`, and the raw model interface. Streaming lets you display partial responses as they arrive.
+
+## Stream Events
+
+All streaming APIs yield `StreamEvent` objects:
+
+| Event | Fields | Description |
+| --- | --- | --- |
+| `content_delta` | `content: string` | A chunk of text content |
+| `tool_call_start` | `toolCall: { id, name }` | A tool call has started |
+| `tool_call_delta` | `toolCallId, arguments` | Incremental tool call arguments |
+| `tool_call_done` | `toolCallId` | Tool call arguments are complete |
+| `done` | `response: ModelResponse` | The model finished a response |
+
+## Streaming with Sessions
+
+```ts
+session.send("Tell me a story");
+for await (const event of session.stream()) {
+  switch (event.type) {
+    case "content_delta":
+      process.stdout.write(event.content);
+      break;
+    case "done":
+      console.log("\n\nTokens:", event.response.usage?.totalTokens);
+      break;
+  }
+}
+```
+
+## Streaming with `stream()`
+
+The lower-level `stream()` function returns both a stream and a result promise:
+
+```ts
+import { Agent, stream } from "stratus/core";
+
+const agent = new Agent({ name: "writer", model });
+const { stream: s, result } = stream(agent, "Write a haiku");
+
+for await (const event of s) {
+  if (event.type === "content_delta") {
+    process.stdout.write(event.content);
+  }
+}
+
+const finalResult = await result;
+console.log(finalResult.output);
+console.log(finalResult.usage);
+```
+
+## Multi-Turn Tool Calls
+
+When the model makes tool calls during streaming, you'll see multiple rounds of events. Each round consists of tool call events followed by content events:
+
+```ts
+for await (const event of session.stream()) {
+  switch (event.type) {
+    case "tool_call_start":
+      console.log(`Calling tool: ${event.toolCall.name}`);
+      break;
+    case "content_delta":
+      process.stdout.write(event.content);
+      break;
+    case "done":
+      // One 'done' per model call — you may see multiple if tools are used
+      break;
+  }
+}
+```
+
+## Abort Signal
+
+Pass an `AbortSignal` to cancel a running stream or `run()`. When aborted, a `RunAbortedError` is thrown.
+
+### With `run()`
+
+```ts
+import { RunAbortedError } from "stratus/core";
+
+const ac = new AbortController();
+
+// Cancel after 5 seconds
+setTimeout(() => ac.abort(), 5000);
+
+try {
+  const result = await run(agent, "Write a novel", { signal: ac.signal });
+} catch (error) {
+  if (error instanceof RunAbortedError) {
+    console.log("Run was cancelled");
+  }
+}
+```
+
+### With `stream()`
+
+```ts
+const ac = new AbortController();
+const { stream: s, result } = stream(agent, "Write a novel", {
+  signal: ac.signal,
+});
+
+try {
+  for await (const event of s) {
+    if (event.type === "content_delta") process.stdout.write(event.content);
+  }
+} catch (error) {
+  if (error instanceof RunAbortedError) {
+    console.log("Stream was cancelled");
+  }
+}
+
+// The result promise also rejects with RunAbortedError
+```
+
+### With Sessions
+
+```ts
+const ac = new AbortController();
+
+session.send("Write a very long essay.");
+try {
+  for await (const event of session.stream({ signal: ac.signal })) {
+    if (event.type === "content_delta") process.stdout.write(event.content);
+  }
+} catch (error) {
+  if (error instanceof RunAbortedError) {
+    console.log("Session stream was cancelled");
+  }
+}
+```
+
+The signal is threaded through to model API calls and tool `execute` functions, so cancellation is immediate.
+
+### Pre-Aborted Signals
+
+If the signal is already aborted when passed, the run throws `RunAbortedError` immediately without making any API calls.
+
+## Non-Streaming with `run()`
+
+If you don't need streaming, `run()` returns the complete result directly:
+
+```ts
+import { Agent, run } from "stratus/core";
+
+const agent = new Agent({ name: "assistant", model });
+const result = await run(agent, "What is 2 + 2?");
+console.log(result.output);
+```
+
+## RunResult
+
+Both `run()` and `stream()` produce a `RunResult`:
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `output` | `string` | Raw text output from the model |
+| `finalOutput` | `TOutput` | Parsed structured output (if `outputType` is set) |
+| `messages` | `ChatMessage[]` | Full message history for this run |
+| `usage` | `UsageInfo` | Accumulated token usage |
+| `lastAgent` | `Agent` | The agent that produced the final response |
+| `finishReason` | `string?` | The model's finish reason (`"stop"`, `"tool_calls"`, etc.) |

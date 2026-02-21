@@ -1,0 +1,23 @@
+{
+	"title": "Documentation",
+	"pages": [
+		"---Getting Started---",
+		"index",
+		"getting-started",
+		"---Core Concepts---",
+		"agents",
+		"tools",
+		"subagents",
+		"sessions",
+		"streaming",
+		"structured-output",
+		"---Advanced---",
+		"handoffs",
+		"guardrails",
+		"hooks",
+		"tracing",
+		"errors",
+		"---Azure---",
+		"...azure"
+	]
+}

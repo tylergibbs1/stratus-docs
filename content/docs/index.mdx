@@ -1,0 +1,70 @@
+---
+title: Introduction
+description: A TypeScript agent SDK for Azure OpenAI
+---
+
+Stratus is a TypeScript SDK for building AI agents powered by Azure OpenAI. It provides a clean, composable API for multi-turn conversations, tool use, multi-agent handoffs, streaming, guardrails, and tracing.
+
+## Features
+
+- **Agents** — Define agents with instructions, tools, and model settings
+- **Sessions** — Multi-turn conversations with persistent message history, save/resume/fork
+- **Tools** — Type-safe tool definitions with Zod schema validation
+- **Subagents** — Delegate work to child agents as tool calls
+- **Streaming** — Real-time streaming with abort signal cancellation
+- **Structured Output** — Parse model output into typed objects via Zod
+- **Multimodal** — Send text and images in user messages
+- **Handoffs** — Route conversations between specialized agents
+- **Guardrails** — Input and output validation with tripwire support
+- **Hooks** — Lifecycle callbacks with permission control (allow/deny/modify)
+- **Tracing** — Built-in span-based tracing via `AsyncLocalStorage`
+- **Azure Native** — First-class Azure OpenAI Chat Completions support
+
+## Quick Example
+
+```ts
+import { AzureChatCompletionsModel } from "stratus";
+import { createSession, tool } from "stratus/core";
+import { z } from "zod";
+
+const model = new AzureChatCompletionsModel({
+  endpoint: process.env.AZURE_ENDPOINT!,
+  apiKey: process.env.AZURE_API_KEY!,
+  deployment: "gpt-4o",
+});
+
+const getWeather = tool({
+  name: "get_weather",
+  description: "Get current weather for a city",
+  parameters: z.object({ city: z.string() }),
+  execute: async (_ctx, { city }) => `72°F and sunny in ${city}`,
+});
+
+await using session = createSession({
+  model,
+  instructions: "You are a weather assistant.",
+  tools: [getWeather],
+});
+
+session.send("What's the weather in NYC?");
+for await (const event of session.stream()) {
+  if (event.type === "content_delta") process.stdout.write(event.content);
+}
+
+// Multi-turn: context persists automatically
+session.send("What about London?");
+for await (const event of session.stream()) {
+  if (event.type === "content_delta") process.stdout.write(event.content);
+}
+```
+
+## Architecture
+
+Stratus is organized into two layers:
+
+| Package | Description |
+| --- | --- |
+| `stratus/core` | Provider-agnostic: Agent, Session, run loop, tools, handoffs, guardrails, hooks, tracing |
+| `stratus` | Re-exports core + Azure OpenAI implementation |
+
+The core layer defines the `Model` interface. Azure is the built-in implementation, but you can plug in any provider by implementing `Model`.

@@ -1,0 +1,136 @@
+---
+title: Agents
+description: Define AI agents with instructions, tools, and model settings
+---
+
+An `Agent` is the central building block of Stratus. It encapsulates a model, system prompt, tools, and behavior configuration.
+
+## Creating an Agent
+
+```ts
+import { Agent } from "stratus/core";
+
+const agent = new Agent({
+  name: "assistant",
+  model,
+  instructions: "You are a helpful assistant.",
+});
+```
+
+## Configuration
+
+The `AgentConfig` interface accepts these properties:
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `name` | `string` | **Required.** Agent name, used in handoff tool names and tracing |
+| `instructions` | `string \| (ctx) => string` | System prompt — can be a string or async function |
+| `model` | `Model` | LLM model to use |
+| `tools` | `FunctionTool[]` | Available tools |
+| `subagents` | `SubAgent[]` | [Sub-agents](/docs/subagents) that run as tool calls |
+| `modelSettings` | `ModelSettings` | Temperature, max tokens, etc. |
+| `outputType` | `z.ZodType` | Zod schema for [structured output](/docs/structured-output) |
+| `handoffs` | `HandoffInput[]` | Other agents this agent can [hand off](/docs/handoffs) to |
+| `inputGuardrails` | `InputGuardrail[]` | Pre-execution [guardrails](/docs/guardrails) |
+| `outputGuardrails` | `OutputGuardrail[]` | Post-execution [guardrails](/docs/guardrails) |
+| `hooks` | `AgentHooks` | Lifecycle [hooks](/docs/hooks) |
+| `toolUseBehavior` | `ToolUseBehavior` | What to do after tool calls |
+
+## Dynamic Instructions
+
+Instructions can be a function that receives the context and returns a string. This lets you customize the system prompt per-request:
+
+```ts
+const agent = new Agent({
+  name: "assistant",
+  model,
+  instructions: (ctx: { language: string }) =>
+    `You are a helpful assistant. Respond in ${ctx.language}.`,
+});
+
+await run(agent, "Hello", { context: { language: "Spanish" } });
+```
+
+Async functions are also supported:
+
+```ts
+instructions: async (ctx) => {
+  const rules = await fetchRulesFromDB(ctx.tenantId);
+  return `Follow these rules: ${rules}`;
+},
+```
+
+## Model Settings
+
+Fine-tune model behavior with `modelSettings`:
+
+```ts
+const agent = new Agent({
+  name: "creative-writer",
+  model,
+  modelSettings: {
+    temperature: 0.9,
+    maxTokens: 2000,
+    topP: 0.95,
+  },
+});
+```
+
+Available settings:
+
+| Setting | Type | Description |
+| --- | --- | --- |
+| `temperature` | `number` | Sampling temperature (0–2) |
+| `topP` | `number` | Nucleus sampling threshold |
+| `maxTokens` | `number` | Maximum tokens to generate |
+| `stop` | `string[]` | Stop sequences |
+| `presencePenalty` | `number` | Presence penalty (-2 to 2) |
+| `frequencyPenalty` | `number` | Frequency penalty (-2 to 2) |
+| `toolChoice` | `ToolChoice` | Control which tools the model calls |
+| `parallelToolCalls` | `boolean` | Allow parallel tool execution |
+| `seed` | `number` | Deterministic sampling seed |
+
+## Tool Choice
+
+Control how the model uses tools:
+
+```ts
+// Let the model decide (default)
+modelSettings: { toolChoice: "auto" }
+
+// Force a specific tool
+modelSettings: { toolChoice: { type: "function", function: { name: "search" } } }
+
+// Force the model to use at least one tool
+modelSettings: { toolChoice: "required" }
+
+// Disable tool use
+modelSettings: { toolChoice: "none" }
+```
+
+## Tool Use Behavior
+
+Control what happens after tool calls execute:
+
+```ts
+// Default: send tool results back to the model for another response
+toolUseBehavior: "run_llm_again"
+
+// Stop and return tool output as the final result
+toolUseBehavior: "stop_on_first_tool"
+
+// Stop only for specific tools
+toolUseBehavior: { stopAtToolNames: ["final_answer"] }
+```
+
+## Cloning Agents
+
+Create a modified copy of an agent with `clone()`:
+
+```ts
+const spanishAgent = agent.clone({
+  instructions: "Respond only in Spanish.",
+});
+```
+
+All properties not in the override are preserved from the original.

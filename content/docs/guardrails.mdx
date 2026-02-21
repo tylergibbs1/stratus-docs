@@ -1,0 +1,124 @@
+---
+title: Guardrails
+description: Input and output validation with tripwire support
+---
+
+Guardrails validate agent input and output, allowing you to block harmful or invalid content before it reaches the user.
+
+## Input Guardrails
+
+Input guardrails run before the model is called. They check the user's message:
+
+```ts
+import { Agent, run } from "stratus/core";
+import type { InputGuardrail } from "stratus/core";
+
+const noPersonalInfo: InputGuardrail = {
+  name: "no_personal_info",
+  execute: async (input) => {
+    const hasPII = /\b\d{3}-\d{2}-\d{4}\b/.test(input); // SSN pattern
+    return { tripwireTriggered: hasPII };
+  },
+};
+
+const agent = new Agent({
+  name: "assistant",
+  model,
+  inputGuardrails: [noPersonalInfo],
+});
+```
+
+## Output Guardrails
+
+Output guardrails run after the model responds. They check the model's output:
+
+```ts
+import type { OutputGuardrail } from "stratus/core";
+
+const noCodeInOutput: OutputGuardrail = {
+  name: "no_code",
+  execute: async (output) => {
+    const hasCode = output.includes("```");
+    return { tripwireTriggered: hasCode };
+  },
+};
+
+const agent = new Agent({
+  name: "assistant",
+  model,
+  outputGuardrails: [noCodeInOutput],
+});
+```
+
+## Guardrail Interface
+
+```ts
+interface InputGuardrail<TContext = unknown> {
+  name: string;
+  execute: (input: string, context: TContext) => GuardrailResult | Promise<GuardrailResult>;
+}
+
+interface OutputGuardrail<TContext = unknown> {
+  name: string;
+  execute: (output: string, context: TContext) => GuardrailResult | Promise<GuardrailResult>;
+}
+
+interface GuardrailResult {
+  tripwireTriggered: boolean;
+  outputInfo?: unknown; // Optional metadata about why the tripwire fired
+}
+```
+
+## Tripwire Errors
+
+When a guardrail triggers, it throws an error that you can catch:
+
+```ts
+import {
+  InputGuardrailTripwireTriggered,
+  OutputGuardrailTripwireTriggered,
+} from "stratus/core";
+
+try {
+  await run(agent, userInput);
+} catch (error) {
+  if (error instanceof InputGuardrailTripwireTriggered) {
+    console.log(`Blocked by: ${error.guardrailName}`);
+    console.log(`Details:`, error.outputInfo);
+  }
+  if (error instanceof OutputGuardrailTripwireTriggered) {
+    console.log(`Output blocked by: ${error.guardrailName}`);
+  }
+}
+```
+
+## Using Context
+
+Guardrails receive the same context as tools:
+
+```ts
+const tenantGuardrail: InputGuardrail<AppContext> = {
+  name: "tenant_check",
+  execute: async (input, ctx) => {
+    const isAllowed = await checkTenantPermissions(ctx.tenantId, input);
+    return { tripwireTriggered: !isAllowed };
+  },
+};
+```
+
+## Guardrails in Sessions
+
+```ts
+const session = createSession({
+  model,
+  inputGuardrails: [noPersonalInfo],
+  outputGuardrails: [noCodeInOutput],
+});
+```
+
+## Execution Behavior
+
+- **Input guardrails** run in parallel on the entry agent before any model calls
+- **Output guardrails** run in parallel on the current agent (which may differ from the entry agent after handoffs)
+- Multiple guardrails run concurrently via `Promise.all`
+- The first triggered tripwire throws immediately
