@@ -3,22 +3,22 @@ title: Introduction
 description: A TypeScript agent SDK for Azure OpenAI
 ---
 
-Stratus is a TypeScript SDK for building AI agents powered by Azure OpenAI. It provides a clean, composable API for multi-turn conversations, tool use, multi-agent handoffs, streaming, guardrails, and tracing.
+Stratus is a TypeScript SDK for building AI agents on Azure OpenAI.
+
+You get agents, tools, multi-turn sessions, streaming, handoffs, guardrails, and tracing. One `run()` call handles the entire tool loop. The types are strict. The API is small.
 
 ## Why this exists
 
-Azure OpenAI's v1 API lets you use the standard `OpenAI()` client, point it at your Azure endpoint, and things mostly just work. But "mostly" isn't good enough for production.
+Azure's v1 API lets you use the standard `OpenAI()` client, point it at your endpoint, and things mostly work. But "mostly" breaks down fast in production.
 
-The OpenAI SDK gives you `chat.completions.create()`. Everything else - the tool loop, agent abstractions, streaming, error handling, multi-agent orchestration - is on you:
+The OpenAI SDK gives you `chat.completions.create()`. Everything else is on you:
 
-- **Tool calling requires a manual loop.** Stratus handles the entire [tool loop](/guides/agentic-tool-use) - one `run()` call with parallel execution, validation, and error recovery.
-- **No agent abstraction.** Stratus gives you [composable agents](/agents) with instructions, tools, guardrails, and handoffs in a single config object.
-- **Basic streaming.** Stratus provides typed [stream events](/streaming) - `content_delta`, `tool_call_start`, `tool_call_done` - with accumulation and a final `RunResult`.
-- **Opaque content filter errors.** Stratus throws a typed [`ContentFilterError`](/errors) instead of Azure's buried `inner_error.content_filter_results`.
-- **No multi-agent orchestration.** [Handoffs](/handoffs), [subagents](/subagents), [guardrails](/guardrails), and [hooks](/hooks) are first-class.
-- **Responses API support.** Both [Chat Completions and Responses API](/azure) through the same `Model` interface - swap with one line.
-
-The goal: clean, typed, zero-config for the common case - while properly wrapping Azure's unique capabilities.
+- **Tool calling is a manual loop.** You call the model, check for tool calls, execute them, append the results, call the model again. Stratus does all of that in one [`run()`](/guides/agentic-tool-use) call with parallel execution and error recovery.
+- **No agent abstraction.** You're passing around message arrays. Stratus gives you [agents](/agents) — instructions, tools, guardrails, and handoffs in a single config object.
+- **Streaming is bare.** You get raw SSE chunks. Stratus gives you typed [stream events](/streaming) — `content_delta`, `tool_call_start`, `tool_call_done` — with a `RunResult` at the end.
+- **Content filter errors are buried.** Azure nests them inside `inner_error.content_filter_results`. Stratus throws a typed [`ContentFilterError`](/errors).
+- **Multi-agent orchestration doesn't exist.** [Handoffs](/handoffs), [subagents](/subagents), [guardrails](/guardrails), and [hooks](/hooks) are first-class in Stratus.
+- **Both APIs, one interface.** [Chat Completions and Responses API](/azure) through the same `Model` interface. Swap with one line.
 
 ## Features
 
