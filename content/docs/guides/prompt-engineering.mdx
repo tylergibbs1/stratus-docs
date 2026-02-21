@@ -155,6 +155,53 @@ Rules:
 Examples teach by demonstration. If you find yourself writing a paragraph explaining a format, replace it with 3-4 examples instead. The model learns patterns from examples more reliably than from descriptions.
 </Callout>
 
+## Use XML tags for structure
+
+When instructions get long, the model can blur the boundaries between sections. XML tags create clear separation between context, rules, examples, and data so the model parses each part correctly.
+
+```ts title="xml-structured-instructions.ts"
+import { Agent } from "stratus/core";
+
+const agent = new Agent({
+  name: "support",
+  model,
+  instructions: `You are a tier-1 support agent for Acme Corp.
+
+<rules>
+- Always search the knowledge base before answering.
+- Never guess at account balances or order statuses.
+- If you cannot resolve the issue in two attempts, create a ticket.
+- Be concise. Maximum 3 sentences per response.
+</rules>
+
+<tone>
+Professional but warm. Use the customer's first name.
+Avoid jargon. Explain technical concepts in plain language.
+</tone>
+
+<examples>
+<example>
+Customer: Why was I charged twice?
+Response: Hi Sarah, I can see a duplicate charge on your account from Dec 3. I've flagged it for our billing team and you'll see the refund within 3-5 business days.
+</example>
+<example>
+Customer: How do I connect to the API?
+Response: You'll find your API key under Settings > Integrations. Here's our quickstart guide: https://docs.acme.com/api/quickstart
+</example>
+</examples>`,
+});
+```
+
+Three guidelines for XML tags in instructions:
+
+1. **Use semantic names.** `<rules>`, `<tone>`, `<examples>` are clearer than `<section1>`, `<section2>`.
+2. **Nest where it makes sense.** Wrap individual examples in `<example>` tags inside an outer `<examples>` block.
+3. **Reference tags by name.** Write "Follow the rules in `<rules>`" so the model knows exactly which section you mean.
+
+<Callout type="info">
+XML tags are most useful for instructions over ~200 words. For short prompts, plain text with headers works fine. Don't add structure for the sake of structure.
+</Callout>
+
 ## Dynamic instructions
 
 When your instructions need runtime data, pass a function instead of a string. The function receives the agent's context object and returns the instructions.
