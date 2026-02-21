@@ -7,7 +7,7 @@ Structured output lets you constrain the model to respond with JSON matching a Z
 
 ## Basic Usage
 
-```ts
+```ts title="structured.ts"
 import { z } from "zod";
 import { Agent, run } from "stratus/core";
 
@@ -20,7 +20,7 @@ const schema = z.object({
 const agent = new Agent({
   name: "extractor",
   model,
-  outputType: schema,
+  outputType: schema, // [!code highlight]
   instructions: "Extract person info from the text.",
 });
 
@@ -34,7 +34,7 @@ console.log(result.finalOutput.interests); // ["hiking", "chess"]
 
 ## With Sessions
 
-```ts
+```ts title="session-structured.ts"
 const session = createSession({
   model,
   outputType: z.object({ answer: z.number() }),
@@ -49,7 +49,7 @@ console.log(result.finalOutput.answer); // 42
 
 ## With `prompt()`
 
-```ts
+```ts title="prompt-structured.ts"
 const result = await prompt("What is the capital of France?", {
   model,
   outputType: z.object({
@@ -63,19 +63,42 @@ console.log(result.finalOutput); // { city: "Paris", country: "France" }
 
 ## How It Works
 
-When `outputType` is set:
+<Steps>
+<Step>
 
-1. The Zod schema is converted to JSON Schema via `zodToJsonSchema()`
-2. The JSON Schema is sent as `response_format` with `type: "json_schema"` and `strict: true`
-3. Azure enforces that the model output matches the schema
-4. On completion, Stratus parses the raw JSON output with the Zod schema
-5. The typed result is available on `result.finalOutput`
+### Schema conversion
+
+The Zod schema is converted to JSON Schema via `zodToJsonSchema()`.
+
+</Step>
+<Step>
+
+### Sent to Azure
+
+The JSON Schema is sent as `response_format` with `type: "json_schema"` and `strict: true`.
+
+</Step>
+<Step>
+
+### Model output constrained
+
+Azure enforces that the model output matches the schema.
+
+</Step>
+<Step>
+
+### Parsed and typed
+
+On completion, Stratus parses the raw JSON output with the Zod schema. The typed result is available on `result.finalOutput`.
+
+</Step>
+</Steps>
 
 ## Error Handling
 
 If the model output can't be parsed, an `OutputParseError` is thrown:
 
-```ts
+```ts title="error-handling.ts"
 import { OutputParseError } from "stratus/core";
 
 try {
@@ -89,9 +112,11 @@ try {
 
 ## Supported Zod Types
 
-The `zodToJsonSchema` converter supports:
+<Callout type="info">
+The `zodToJsonSchema` converter adds `additionalProperties: false` to all objects for Azure strict mode compatibility.
+</Callout>
 
-- `z.object()` — with required fields and `additionalProperties: false`
+- `z.object()` — with required fields
 - `z.string()`, `z.number()`, `z.boolean()`
 - `z.array()`
 - `z.enum()`

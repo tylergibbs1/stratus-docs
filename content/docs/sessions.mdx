@@ -7,7 +7,7 @@ Sessions provide a high-level API for multi-turn conversations. Messages persist
 
 ## Creating a Session
 
-```ts
+```ts title="session.ts"
 import { createSession } from "stratus/core";
 
 const session = createSession({
@@ -21,11 +21,25 @@ const session = createSession({
 
 The session API follows a simple two-step pattern:
 
-1. **`send(message)`** — Queue a user message (synchronous, no API call)
-2. **`stream()`** — Run the agent loop, yielding streaming events
+<Steps>
+<Step>
+
+### Queue a message
+
+`send(message)` queues a user message synchronously — no API call is made.
 
 ```ts
 session.send("What's the weather in NYC?");
+```
+
+</Step>
+<Step>
+
+### Stream the response
+
+`stream()` runs the agent loop, yielding streaming events.
+
+```ts
 for await (const event of session.stream()) {
   if (event.type === "content_delta") {
     process.stdout.write(event.content);
@@ -33,18 +47,21 @@ for await (const event of session.stream()) {
 }
 ```
 
+</Step>
+</Steps>
+
 ## Multi-Turn
 
 Just call `send()` and `stream()` again. Previous messages are automatically included:
 
-```ts
+```ts title="multi-turn.ts"
 session.send("What's the weather in NYC?");
 for await (const event of session.stream()) {
   if (event.type === "content_delta") process.stdout.write(event.content);
 }
 
 // The model sees the full conversation so far
-session.send("What about London?");
+session.send("What about London?"); // [!code highlight]
 for await (const event of session.stream()) {
   if (event.type === "content_delta") process.stdout.write(event.content);
 }
@@ -54,7 +71,7 @@ for await (const event of session.stream()) {
 
 `send()` accepts either a string or a `ContentPart[]` array for multimodal input:
 
-```ts
+```ts title="multimodal.ts"
 import type { ContentPart } from "stratus/core";
 
 const parts: ContentPart[] = [
@@ -62,18 +79,17 @@ const parts: ContentPart[] = [
   { type: "image_url", image_url: { url: "https://example.com/photo.png" } },
 ];
 
-session.send(parts);
+session.send(parts); // [!code highlight]
 for await (const event of session.stream()) {
   if (event.type === "content_delta") process.stdout.write(event.content);
 }
 ```
 
-Content part types:
+<Callout type="info" title="Content Part Types">
+`TextContentPart` — `{ type: "text", text: string }`
 
-| Type | Fields | Description |
-| --- | --- | --- |
-| `TextContentPart` | `type: "text"`, `text: string` | A text segment |
-| `ImageContentPart` | `type: "image_url"`, `image_url: { url, detail? }` | An image URL with optional detail level (`"auto"`, `"low"`, `"high"`) |
+`ImageContentPart` — `{ type: "image_url", image_url: { url: string, detail?: "auto" | "low" | "high" } }`
+</Callout>
 
 The `prompt()` function also accepts `ContentPart[]`:
 
@@ -105,27 +121,33 @@ const messages = session.messages;
 // Returns a copy — mutating it won't affect the session
 ```
 
+<Callout>
 Messages include all user, assistant, and tool messages from previous turns. System messages are managed internally and not included.
+</Callout>
 
 ## Save, Resume, and Fork
 
 Sessions can be saved to a snapshot and resumed or forked later. This enables persistence, branching conversations, and recovery from failures.
 
-### Saving
+<Tabs items={["Save", "Resume", "Fork"]}>
+<Tab value="Save">
 
-```ts
+```ts title="save.ts"
 const snapshot = session.save();
 // snapshot.id — same as session.id
 // snapshot.messages — deep copy of the conversation history
 ```
 
+<Callout type="warn">
 `save()` throws if the session is closed or currently streaming.
+</Callout>
 
-### Resuming
+</Tab>
+<Tab value="Resume">
 
 Resume a session with the same ID and conversation history:
 
-```ts
+```ts title="resume.ts"
 import { resumeSession } from "stratus/core";
 
 const session2 = resumeSession(snapshot, {
@@ -134,16 +156,16 @@ const session2 = resumeSession(snapshot, {
 });
 
 // session2.id === snapshot.id
-// Model sees the full previous conversation
 session2.send("Continue where we left off.");
 for await (const event of session2.stream()) { /* ... */ }
 ```
 
-### Forking
+</Tab>
+<Tab value="Fork">
 
-Fork creates a new session (new ID) with a copy of the conversation history, enabling branching:
+Fork creates a new session (new ID) with a copy of the conversation history:
 
-```ts
+```ts title="fork.ts"
 import { forkSession } from "stratus/core";
 
 const forked = forkSession(snapshot, {
@@ -152,21 +174,25 @@ const forked = forkSession(snapshot, {
 });
 
 // forked.id !== snapshot.id
-// forked has a copy of the messages — changes don't affect the original
 forked.send("Take a different direction.");
 for await (const event of forked.stream()) { /* ... */ }
 ```
+
+</Tab>
+</Tabs>
 
 ## Abort Signal
 
 Pass an `AbortSignal` to `stream()` to cancel a running turn:
 
-```ts
+```ts title="abort.ts"
+import { RunAbortedError } from "stratus/core";
+
 const ac = new AbortController();
 
 session.send("Write a very long essay.");
 try {
-  for await (const event of session.stream({ signal: ac.signal })) {
+  for await (const event of session.stream({ signal: ac.signal })) { // [!code highlight]
     if (event.type === "content_delta") process.stdout.write(event.content);
   }
 } catch (error) {
@@ -176,22 +202,32 @@ try {
 }
 ```
 
-The signal is per-invocation, not per-session. See [Streaming — Abort Signal](/docs/streaming#abort-signal) for details.
+<Callout type="info">
+The signal is per-invocation, not per-session. See [Streaming — Abort Signal](/docs/streaming#abort-signal) for more details.
+</Callout>
 
 ## Cleanup
 
 Sessions support both explicit cleanup and `await using`:
 
-```ts
-// Explicit
-session.close();
+<Tabs items={["await using", "Explicit"]}>
+<Tab value="await using">
 
-// Automatic via Symbol.asyncDispose
+```ts
 await using session = createSession({ model });
 // session.close() is called automatically when the block exits
 ```
 
-After closing, `send()`, `stream()`, and `save()` will throw.
+</Tab>
+<Tab value="Explicit">
+
+```ts
+session.close();
+// After closing, send(), stream(), and save() will throw
+```
+
+</Tab>
+</Tabs>
 
 ## One-Shot with `prompt()`
 

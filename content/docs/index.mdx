@@ -7,22 +7,42 @@ Stratus is a TypeScript SDK for building AI agents powered by Azure OpenAI. It p
 
 ## Features
 
-- **Agents** — Define agents with instructions, tools, and model settings
-- **Sessions** — Multi-turn conversations with persistent message history, save/resume/fork
-- **Tools** — Type-safe tool definitions with Zod schema validation
-- **Subagents** — Delegate work to child agents as tool calls
-- **Streaming** — Real-time streaming with abort signal cancellation
-- **Structured Output** — Parse model output into typed objects via Zod
-- **Multimodal** — Send text and images in user messages
-- **Handoffs** — Route conversations between specialized agents
-- **Guardrails** — Input and output validation with tripwire support
-- **Hooks** — Lifecycle callbacks with permission control (allow/deny/modify)
-- **Tracing** — Built-in span-based tracing via `AsyncLocalStorage`
-- **Azure Native** — First-class Azure OpenAI Chat Completions support
+<Cards>
+  <Card title="Agents" href="/docs/agents">
+    Define agents with instructions, tools, and model settings
+  </Card>
+  <Card title="Sessions" href="/docs/sessions">
+    Multi-turn conversations with save/resume/fork
+  </Card>
+  <Card title="Tools" href="/docs/tools">
+    Type-safe tool definitions with Zod schema validation
+  </Card>
+  <Card title="Subagents" href="/docs/subagents">
+    Delegate work to child agents as tool calls
+  </Card>
+  <Card title="Streaming" href="/docs/streaming">
+    Real-time streaming with abort signal cancellation
+  </Card>
+  <Card title="Structured Output" href="/docs/structured-output">
+    Parse model output into typed objects via Zod
+  </Card>
+  <Card title="Handoffs" href="/docs/handoffs">
+    Route conversations between specialized agents
+  </Card>
+  <Card title="Hooks" href="/docs/hooks">
+    Lifecycle callbacks with permission control (allow/deny/modify)
+  </Card>
+  <Card title="Guardrails" href="/docs/guardrails">
+    Input and output validation with tripwire support
+  </Card>
+  <Card title="Tracing" href="/docs/tracing">
+    Built-in span-based tracing via AsyncLocalStorage
+  </Card>
+</Cards>
 
 ## Quick Example
 
-```ts
+```ts title="weather-agent.ts"
 import { AzureChatCompletionsModel } from "stratus";
 import { createSession, tool } from "stratus/core";
 import { z } from "zod";
@@ -68,3 +88,26 @@ Stratus is organized into two layers:
 | `stratus` | Re-exports core + Azure OpenAI implementation |
 
 The core layer defines the `Model` interface. Azure is the built-in implementation, but you can plug in any provider by implementing `Model`.
+
+<Files>
+  <Folder name="src" defaultOpen>
+    <Folder name="core" defaultOpen>
+      <File name="agent.ts" />
+      <File name="run.ts" />
+      <File name="session.ts" />
+      <File name="tool.ts" />
+      <File name="subagent.ts" />
+      <File name="handoff.ts" />
+      <File name="hooks.ts" />
+      <File name="guardrails.ts" />
+      <File name="tracing.ts" />
+      <File name="types.ts" />
+      <File name="model.ts" />
+      <File name="errors.ts" />
+    </Folder>
+    <Folder name="azure">
+      <File name="chat-completions-model.ts" />
+      <File name="sse-parser.ts" />
+    </Folder>
+  </Folder>
+</Files>

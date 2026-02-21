@@ -19,7 +19,7 @@ All streaming APIs yield `StreamEvent` objects:
 
 ## Streaming with Sessions
 
-```ts
+```ts title="session-stream.ts"
 session.send("Tell me a story");
 for await (const event of session.stream()) {
   switch (event.type) {
@@ -37,7 +37,7 @@ for await (const event of session.stream()) {
 
 The lower-level `stream()` function returns both a stream and a result promise:
 
-```ts
+```ts title="stream.ts"
 import { Agent, stream } from "stratus/core";
 
 const agent = new Agent({ name: "writer", model });
@@ -58,7 +58,7 @@ console.log(finalResult.usage);
 
 When the model makes tool calls during streaming, you'll see multiple rounds of events. Each round consists of tool call events followed by content events:
 
-```ts
+```ts title="tool-events.ts"
 for await (const event of session.stream()) {
   switch (event.type) {
     case "tool_call_start":
@@ -78,18 +78,17 @@ for await (const event of session.stream()) {
 
 Pass an `AbortSignal` to cancel a running stream or `run()`. When aborted, a `RunAbortedError` is thrown.
 
-### With `run()`
+<Tabs items={["run()", "stream()", "Session"]}>
+<Tab value="run()">
 
-```ts
+```ts title="abort-run.ts"
 import { RunAbortedError } from "stratus/core";
 
 const ac = new AbortController();
-
-// Cancel after 5 seconds
-setTimeout(() => ac.abort(), 5000);
+setTimeout(() => ac.abort(), 5000); // Cancel after 5 seconds
 
 try {
-  const result = await run(agent, "Write a novel", { signal: ac.signal });
+  const result = await run(agent, "Write a novel", { signal: ac.signal }); // [!code highlight]
 } catch (error) {
   if (error instanceof RunAbortedError) {
     console.log("Run was cancelled");
@@ -97,12 +96,13 @@ try {
 }
 ```
 
-### With `stream()`
+</Tab>
+<Tab value="stream()">
 
-```ts
+```ts title="abort-stream.ts"
 const ac = new AbortController();
 const { stream: s, result } = stream(agent, "Write a novel", {
-  signal: ac.signal,
+  signal: ac.signal, // [!code highlight]
 });
 
 try {
@@ -118,14 +118,15 @@ try {
 // The result promise also rejects with RunAbortedError
 ```
 
-### With Sessions
+</Tab>
+<Tab value="Session">
 
-```ts
+```ts title="abort-session.ts"
 const ac = new AbortController();
 
 session.send("Write a very long essay.");
 try {
-  for await (const event of session.stream({ signal: ac.signal })) {
+  for await (const event of session.stream({ signal: ac.signal })) { // [!code highlight]
     if (event.type === "content_delta") process.stdout.write(event.content);
   }
 } catch (error) {
@@ -135,11 +136,12 @@ try {
 }
 ```
 
-The signal is threaded through to model API calls and tool `execute` functions, so cancellation is immediate.
+</Tab>
+</Tabs>
 
-### Pre-Aborted Signals
-
-If the signal is already aborted when passed, the run throws `RunAbortedError` immediately without making any API calls.
+<Callout type="info">
+The signal is threaded through to model API calls and tool `execute` functions, so cancellation is immediate. Pre-aborted signals throw `RunAbortedError` without making any API calls.
+</Callout>
 
 ## Non-Streaming with `run()`
 

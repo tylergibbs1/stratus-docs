@@ -25,7 +25,7 @@ You need an Azure OpenAI resource with a deployed model. You'll need:
 
 ## Create a Model
 
-```ts
+```ts title="model.ts"
 import { AzureChatCompletionsModel } from "stratus";
 
 const model = new AzureChatCompletionsModel({
@@ -35,22 +35,26 @@ const model = new AzureChatCompletionsModel({
 });
 ```
 
-## One-Shot with `prompt()`
+## Your First Agent
 
-The simplest way to use Stratus is the `prompt()` function — send a message and get a result:
+<Tabs items={["prompt()", "Session", "run()"]}>
+<Tab value="prompt()">
 
-```ts
+The simplest approach — send a message and get a result:
+
+```ts title="one-shot.ts"
 import { prompt } from "stratus/core";
 
 const result = await prompt("What is 2 + 2?", { model });
 console.log(result.output); // "4"
 ```
 
-## Session-Based Conversations
+</Tab>
+<Tab value="Session">
 
 For multi-turn conversations, use `createSession()`:
 
-```ts
+```ts title="session.ts"
 import { createSession } from "stratus/core";
 
 await using session = createSession({
@@ -70,11 +74,12 @@ for await (const event of session.stream()) {
 }
 ```
 
-## Agent-Based with `run()`
+</Tab>
+<Tab value="run()">
 
 For lower-level control, create an `Agent` and use `run()` or `stream()` directly:
 
-```ts
+```ts title="agent.ts"
 import { Agent, run } from "stratus/core";
 
 const agent = new Agent({
@@ -87,9 +92,22 @@ const result = await run(agent, "What is the capital of France?");
 console.log(result.output); // "The capital of France is Paris."
 ```
 
+</Tab>
+</Tabs>
+
 ## Next Steps
 
-- [Agents](/docs/agents) — Configure agents with instructions and model settings
-- [Tools](/docs/tools) — Give agents the ability to call functions
-- [Sessions](/docs/sessions) — Multi-turn conversation management
-- [Streaming](/docs/streaming) — Real-time response streaming
+<Cards>
+  <Card title="Agents" href="/docs/agents">
+    Configure agents with instructions and model settings
+  </Card>
+  <Card title="Tools" href="/docs/tools">
+    Give agents the ability to call functions
+  </Card>
+  <Card title="Sessions" href="/docs/sessions">
+    Multi-turn conversation management
+  </Card>
+  <Card title="Streaming" href="/docs/streaming">
+    Real-time response streaming
+  </Card>
+</Cards>

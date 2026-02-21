@@ -7,7 +7,7 @@ Subagents let a parent agent delegate work to a child agent. The child runs as a
 
 ## Defining a Subagent
 
-```ts
+```ts title="subagent.ts"
 import { Agent, subagent } from "stratus/core";
 import { z } from "zod";
 
@@ -23,7 +23,7 @@ const mathSubagent = subagent({
   inputSchema: z.object({
     problem: z.string().describe("The math problem to solve"),
   }),
-  mapInput: (params) => params.problem,
+  mapInput: (params) => params.problem, // [!code highlight]
 });
 ```
 
@@ -31,12 +31,12 @@ const mathSubagent = subagent({
 
 Add subagents to a parent agent's `subagents` array. They appear as tools to the model:
 
-```ts
+```ts title="parent.ts"
 const assistant = new Agent({
   name: "assistant",
   model,
   instructions: "Use the math subagent for math questions.",
-  subagents: [mathSubagent],
+  subagents: [mathSubagent], // [!code highlight]
 });
 
 const result = await run(assistant, "What is 15 * 17?");
@@ -61,33 +61,35 @@ console.log(result.output); // Contains "255"
 
 If the child agent has a different context type, use `mapContext` to transform it:
 
-```ts
+```ts title="context-mapping.ts"
 const childSubagent = subagent({
   agent: childAgent, // Agent<{ apiKey: string }>
   inputSchema: z.object({ query: z.string() }),
   mapInput: (params) => params.query,
-  mapContext: (parentCtx: { config: { key: string } }) => ({
-    apiKey: parentCtx.config.key,
-  }),
+  mapContext: (parentCtx: { config: { key: string } }) => ({ // [!code highlight]
+    apiKey: parentCtx.config.key, // [!code highlight]
+  }), // [!code highlight]
 });
 ```
 
 ## Error Handling
 
-If the child agent throws an error, it's caught and returned as a tool message to the parent. This lets the parent recover gracefully:
+<Callout>
+If the child agent throws an error, it's caught and returned as a tool message to the parent. This lets the parent recover gracefully rather than crashing the entire run.
+</Callout>
 
 ```ts
-// If the child fails, the parent sees:
+// If the child fails, the parent sees a tool message like:
 // "Error in sub-agent "math": Agent exceeded maximum turns (10)"
 ```
 
 ## Subagents in Sessions
 
-```ts
+```ts title="session-subagent.ts"
 const session = createSession({
   model,
   instructions: "Delegate math to the math subagent.",
-  subagents: [mathSubagent],
+  subagents: [mathSubagent], // [!code highlight]
 });
 
 session.send("What is 2^10?");
@@ -100,7 +102,7 @@ for await (const event of session.stream()) {
 
 Subagent executions are recorded as `"subagent"` span type in traces:
 
-```ts
+```ts title="tracing.ts"
 const { result, trace } = await withTrace("my_trace", () =>
   run(assistant, "What is 99 * 99?")
 );
@@ -120,3 +122,12 @@ console.log(subagentSpans[0].name); // "subagent:math"
 | **Use case** | Delegate a subtask, get the answer back | Route the conversation to a specialist |
 | **Message history** | Child gets a fresh message history | Child inherits the full message history |
 | **Result** | Child's output becomes a tool message | Child's output becomes the final output |
+
+<Cards>
+  <Card title="Handoffs" href="/docs/handoffs">
+    Transfer control to another agent permanently
+  </Card>
+  <Card title="Tools" href="/docs/tools">
+    Simple function tools without a child agent
+  </Card>
+</Cards>

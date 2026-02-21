@@ -17,7 +17,7 @@ Hooks let you run custom code at key points in the agent lifecycle. Use them for
 
 ## Usage
 
-```ts
+```ts title="hooks.ts"
 import { Agent } from "stratus/core";
 
 const agent = new Agent({
@@ -45,7 +45,11 @@ const agent = new Agent({
 
 ## Permission Control
 
-`beforeToolCall` and `beforeHandoff` can return a decision object to allow, deny, or modify the action. Returning `void` (or not returning anything) is treated as "allow", so existing hooks are fully backward compatible.
+`beforeToolCall` and `beforeHandoff` can return a decision object to **allow**, **deny**, or **modify** the action.
+
+<Callout type="info">
+Returning `void` (or not returning anything) is treated as "allow", so existing hooks are fully backward compatible.
+</Callout>
 
 ### Tool Call Decisions
 
@@ -58,38 +62,58 @@ type ToolCallDecision =
   | { decision: "modify"; modifiedParams: Record<string, unknown> };
 ```
 
-#### Deny a tool call
+<Tabs items={["Deny", "Modify", "Allow"]}>
+<Tab value="Deny">
 
-When denied, the tool's `execute` function is skipped. The `reason` is returned to the model as the tool message, and `afterToolCall` does not fire.
+When denied, the tool's `execute` function is skipped. The `reason` is returned to the model as the tool message, and `afterToolCall` does **not** fire.
 
-```ts
+```ts title="deny-tool.ts"
 hooks: {
   beforeToolCall: ({ toolCall, context }) => {
     if (toolCall.function.name === "delete_user" && !context.isAdmin) {
-      return { decision: "deny", reason: "Admin access required" };
+      return { decision: "deny", reason: "Admin access required" }; // [!code highlight]
     }
   },
 }
 ```
 
+<Callout type="warn">
 If no `reason` is provided, a default message like `Tool call "delete_user" was denied` is used.
+</Callout>
 
-#### Modify tool parameters
+</Tab>
+<Tab value="Modify">
 
 When modified, the `modifiedParams` are passed to the tool instead of the original parsed arguments. `afterToolCall` still fires.
 
-```ts
+```ts title="modify-tool.ts"
 hooks: {
   beforeToolCall: ({ toolCall }) => {
     if (toolCall.function.name === "search") {
       return {
-        decision: "modify",
-        modifiedParams: { query: "safe version of the query" },
+        decision: "modify", // [!code highlight]
+        modifiedParams: { query: "safe version of the query" }, // [!code highlight]
       };
     }
   },
 }
 ```
+
+</Tab>
+<Tab value="Allow">
+
+Explicitly allow (same as returning `void`):
+
+```ts
+hooks: {
+  beforeToolCall: () => {
+    return { decision: "allow" };
+  },
+}
+```
+
+</Tab>
+</Tabs>
 
 ### Handoff Decisions
 
@@ -103,11 +127,11 @@ type HandoffDecision =
 
 When denied, the agent switch is blocked — `result.lastAgent` remains the current agent. The denial `reason` is returned as the tool message.
 
-```ts
+```ts title="deny-handoff.ts"
 hooks: {
   beforeHandoff: ({ toAgent, context }) => {
     if (toAgent.name === "admin_agent" && !context.isAdmin) {
-      return { decision: "deny", reason: "Admin agent access denied" };
+      return { decision: "deny", reason: "Admin agent access denied" }; // [!code highlight]
     }
   },
 }
@@ -115,7 +139,7 @@ hooks: {
 
 ## Hook Signatures
 
-```ts
+```ts title="types.ts"
 interface AgentHooks<TContext> {
   beforeRun?: (params: {
     agent: Agent<TContext, any>;
@@ -152,7 +176,7 @@ interface AgentHooks<TContext> {
 
 ## Hooks in Sessions
 
-```ts
+```ts title="session-hooks.ts"
 const session = createSession({
   model,
   hooks: {
@@ -168,11 +192,25 @@ const session = createSession({
 
 ## Execution Details
 
-- All hooks are optional — only define what you need
+<Accordions>
+<Accordion title="Which agent do hooks fire on?">
 - `beforeRun` and `afterRun` fire on the **entry agent** (the agent passed to `run()` or created by the session)
 - `beforeToolCall` and `afterToolCall` fire on the **current agent** (which may change after handoffs)
 - `beforeHandoff` fires on the agent performing the handoff (the "from" agent)
-- Hooks are `async`-compatible — return a promise if you need to await
-- Returning `void` from `beforeToolCall`/`beforeHandoff` is treated as "allow" (backward compatible)
-- When `beforeToolCall` returns `{ decision: "deny" }`, `afterToolCall` is **not** called
-- When `beforeToolCall` returns `{ decision: "modify" }`, `afterToolCall` **is** called with the modified result
+</Accordion>
+<Accordion title="What happens when a tool call is denied?">
+- The tool's `execute` function is **skipped**
+- The denial reason is returned to the model as a tool message
+- `afterToolCall` does **not** fire
+- The model sees the denial and can respond accordingly
+</Accordion>
+<Accordion title="What happens when a tool call is modified?">
+- The `modifiedParams` are passed to the tool's `execute` instead of the original params
+- `afterToolCall` **does** fire with the result
+</Accordion>
+<Accordion title="What happens when a handoff is denied?">
+- The agent switch is blocked — `currentAgent` stays the same
+- The denial reason replaces the "Transferred to X" tool message
+- The model loop continues with the original agent
+</Accordion>
+</Accordions>

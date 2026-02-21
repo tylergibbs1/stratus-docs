@@ -7,7 +7,7 @@ Tools let agents call your TypeScript functions. Each tool has a name, descripti
 
 ## Defining a Tool
 
-```ts
+```ts title="tools.ts"
 import { tool } from "stratus/core";
 import { z } from "zod";
 
@@ -43,7 +43,7 @@ The `execute` function receives up to three arguments:
 
 Tools can access shared context for things like database connections, API clients, or user info:
 
-```ts
+```ts title="context-tool.ts"
 interface AppContext {
   userId: string;
   db: Database;
@@ -91,15 +91,63 @@ const session = createSession({
 
 ## Tool Call Flow
 
-When an agent uses a tool, the following happens:
+<Steps>
+<Step>
 
-1. The model returns a tool call with a name and arguments
-2. Stratus parses the arguments JSON
-3. The `execute` function runs with the parsed parameters
-4. The result string is sent back to the model as a tool message
-5. The model generates a final response (or calls more tools)
+### Model returns a tool call
 
-This loop continues until the model responds without tool calls, or `toolUseBehavior` causes an early stop.
+The model responds with a tool call containing a name and JSON arguments.
+
+</Step>
+<Step>
+
+### Arguments are parsed
+
+Stratus parses the arguments JSON and validates them against the Zod schema.
+
+</Step>
+<Step>
+
+### Execute function runs
+
+The `execute` function runs with the parsed parameters and context.
+
+</Step>
+<Step>
+
+### Result sent back to model
+
+The result string is sent back to the model as a tool message.
+
+</Step>
+<Step>
+
+### Model generates final response
+
+The model generates a final response (or calls more tools). This loop continues until the model responds without tool calls, or `toolUseBehavior` causes an early stop.
+
+</Step>
+</Steps>
+
+## Abort Signal
+
+When a run is started with an `AbortSignal`, it's passed to each tool's `execute` function via the `options` parameter. Use it to cancel long-running operations:
+
+```ts title="abort-aware-tool.ts"
+const searchTool = tool({
+  name: "search",
+  description: "Search documents",
+  parameters: z.object({ query: z.string() }),
+  execute: async (_ctx, { query }, options) => { // [!code highlight]
+    const res = await fetch(`/api/search?q=${query}`, {
+      signal: options?.signal, // [!code highlight]
+    });
+    return await res.text();
+  },
+});
+```
+
+See [Streaming — Abort Signal](/docs/streaming#abort-signal) for details on passing a signal.
 
 ## Error Handling
 
@@ -115,26 +163,10 @@ execute: async (_ctx, { query }) => {
 },
 ```
 
-## Abort Signal
-
-When a run is started with an `AbortSignal`, it's passed to each tool's `execute` function via the `options` parameter. Use it to cancel long-running operations:
-
-```ts
-const searchTool = tool({
-  name: "search",
-  description: "Search documents",
-  parameters: z.object({ query: z.string() }),
-  execute: async (_ctx, { query }, options) => {
-    const res = await fetch(`/api/search?q=${query}`, {
-      signal: options?.signal,
-    });
-    return await res.text();
-  },
-});
-```
-
-See [Streaming — Abort Signal](/docs/streaming#abort-signal) for details on passing a signal.
-
 ## Schema Conversion
 
-Stratus converts Zod schemas to JSON Schema for the Azure API. The conversion adds `additionalProperties: false` to all objects for Azure strict mode compatibility. Supported Zod types include objects, strings, numbers, booleans, arrays, enums, optionals, nullables, defaults, unions, and descriptions.
+<Callout>
+Stratus converts Zod schemas to JSON Schema for the Azure API. The conversion adds `additionalProperties: false` to all objects for Azure strict mode compatibility.
+</Callout>
+
+Supported Zod types include objects, strings, numbers, booleans, arrays, enums, optionals, nullables, defaults, unions, and descriptions.

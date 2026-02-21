@@ -38,6 +38,18 @@ try {
 
 Thrown when the agent loop exceeds `maxTurns` without producing a final response.
 
+```ts
+import { MaxTurnsExceededError } from "stratus/core";
+
+try {
+  await run(agent, input, { maxTurns: 3 });
+} catch (error) {
+  if (error instanceof MaxTurnsExceededError) {
+    console.error("Agent exceeded max turns");
+  }
+}
+```
+
 ## RunAbortedError
 
 Thrown when a run is cancelled via an `AbortSignal`. See [Streaming — Abort Signal](/docs/streaming#abort-signal).
@@ -57,17 +69,9 @@ try {
 }
 ```
 
-```ts
-import { MaxTurnsExceededError } from "stratus/core";
-
-try {
-  await run(agent, input, { maxTurns: 3 });
-} catch (error) {
-  if (error instanceof MaxTurnsExceededError) {
-    console.error("Agent exceeded max turns");
-  }
-}
-```
+<Callout type="info">
+Pre-aborted signals throw `RunAbortedError` immediately without making any API calls.
+</Callout>
 
 ## ModelError
 

@@ -9,7 +9,7 @@ Handoffs let one agent transfer a conversation to another agent mid-turn. This e
 
 Pass agents directly to `handoffs`. Stratus auto-generates a tool named `transfer_to_{agent_name}`:
 
-```ts
+```ts title="handoff.ts"
 import { Agent, run } from "stratus/core";
 
 const mathAgent = new Agent({
@@ -33,7 +33,7 @@ console.log(result.lastAgent.name); // "math"
 
 Use the `handoff()` function for more control:
 
-```ts
+```ts title="custom-handoff.ts"
 import { handoff } from "stratus/core";
 
 const agent = new Agent({
@@ -42,9 +42,9 @@ const agent = new Agent({
   handoffs: [
     handoff({
       agent: mathAgent,
-      toolName: "escalate_to_math",
+      toolName: "escalate_to_math", // [!code highlight]
       toolDescription: "Escalate complex math problems to the math specialist",
-      onHandoff: async (ctx) => {
+      onHandoff: async (ctx) => { // [!code highlight]
         console.log("Handing off to math agent");
         await logHandoff(ctx, "math");
       },
@@ -64,15 +64,44 @@ const agent = new Agent({
 
 ## How Handoffs Work
 
-1. The handoff is registered as a tool definition alongside the agent's other tools
-2. When the model calls the handoff tool, Stratus executes `onHandoff` (if provided)
-3. The current agent is replaced with the handoff target agent
-4. The system prompt is swapped to the new agent's instructions
-5. The model loop continues with the new agent
+<Steps>
+<Step>
+
+### Registered as tool
+
+The handoff is registered as a tool definition alongside the agent's other tools.
+
+</Step>
+<Step>
+
+### Model calls the tool
+
+When the model decides to hand off, it calls the handoff tool.
+
+</Step>
+<Step>
+
+### Callback fires
+
+Stratus executes `onHandoff` (if provided), then replaces the current agent with the target.
+
+</Step>
+<Step>
+
+### System prompt swaps
+
+The system prompt is replaced with the new agent's instructions. The model loop continues.
+
+</Step>
+</Steps>
+
+<Callout type="info">
+Handoffs can be blocked by `beforeHandoff` hooks returning `{ decision: "deny" }`. See [Hooks — Permission Control](/docs/hooks#permission-control).
+</Callout>
 
 ## Handoffs in Sessions
 
-```ts
+```ts title="session-handoff.ts"
 const session = createSession({
   model,
   instructions: "Route users to the right specialist.",
@@ -88,7 +117,9 @@ const result = await session.result;
 console.log(result.lastAgent.name); // "writing"
 ```
 
-Note: Each `stream()` call starts from the session's configured agent. Handoffs within a turn don't persist to the next turn.
+<Callout type="warn">
+Each `stream()` call starts from the session's configured agent. Handoffs within a turn don't persist to the next turn.
+</Callout>
 
 ## Multi-Agent Patterns
 
@@ -96,12 +127,13 @@ Note: Each `stream()` call starts from the session's configured agent. Handoffs 
 
 A triage agent routes to specialists based on the user's request:
 
-```ts
+```ts title="triage.ts"
 const orderAgent = new Agent({
   name: "orders",
   model,
   instructions: "Help with order lookups and status.",
   tools: [lookupOrder],
+  handoffDescription: "Transfer for order status and tracking", // [!code highlight]
 });
 
 const refundAgent = new Agent({
@@ -109,6 +141,7 @@ const refundAgent = new Agent({
   model,
   instructions: "Process refund requests.",
   tools: [processRefund],
+  handoffDescription: "Transfer for refund processing", // [!code highlight]
 });
 
 const triage = new Agent({
@@ -119,14 +152,6 @@ const triage = new Agent({
 });
 ```
 
-### Handoff Description
-
-Set `handoffDescription` on agents to help the triage agent decide:
-
-```ts
-const orderAgent = new Agent({
-  name: "orders",
-  model,
-  handoffDescription: "Transfer to this agent for order status and tracking",
-});
-```
+<Callout type="info" title="Handoffs vs Subagents">
+Handoffs **transfer control** — the child takes over. Subagents **delegate and return** — the parent keeps control. See [Subagents](/docs/subagents) for the delegation pattern.
+</Callout>

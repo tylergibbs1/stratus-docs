@@ -3,13 +3,13 @@ title: Tracing
 description: Built-in span-based tracing for observability
 ---
 
-Stratus includes an opt-in tracing system that records spans for model calls, tool executions, handoffs, and guardrails. Tracing uses `AsyncLocalStorage` for zero-overhead when inactive.
+Stratus includes an opt-in tracing system that records spans for model calls, tool executions, handoffs, subagents, and guardrails. Tracing uses `AsyncLocalStorage` for zero-overhead when inactive.
 
 ## Basic Usage
 
 Wrap your agent call with `withTrace()` to capture a trace:
 
-```ts
+```ts title="tracing.ts"
 import { withTrace, run, Agent } from "stratus/core";
 
 const agent = new Agent({ name: "assistant", model, tools: [getWeather] });
@@ -25,7 +25,7 @@ console.log(trace.spans);    // Array of recorded spans
 
 ## Trace Structure
 
-```ts
+```ts title="types.ts"
 interface Trace {
   id: string;           // Unique trace ID
   name: string;         // Name passed to withTrace()
@@ -40,7 +40,7 @@ interface Trace {
 
 Each span captures a specific operation:
 
-```ts
+```ts title="types.ts"
 interface Span {
   name: string;
   type: "model_call" | "tool_execution" | "handoff" | "guardrail" | "subagent" | "custom";
@@ -65,7 +65,7 @@ interface Span {
 
 Access the current trace context to record your own spans:
 
-```ts
+```ts title="custom-span.ts"
 import { getCurrentTrace } from "stratus/core";
 
 const myTool = tool({
@@ -74,12 +74,12 @@ const myTool = tool({
   parameters: z.object({ query: z.string() }),
   execute: async (_ctx, { query }) => {
     const trace = getCurrentTrace();
-    const span = trace?.startSpan("vector_search", "custom", { query });
+    const span = trace?.startSpan("vector_search", "custom", { query }); // [!code highlight]
     try {
       const results = await vectorSearch(query);
       return JSON.stringify(results);
     } finally {
-      if (span) trace?.endSpan(span);
+      if (span) trace?.endSpan(span); // [!code highlight]
     }
   },
 });
@@ -87,7 +87,7 @@ const myTool = tool({
 
 ## Inspecting Traces
 
-```ts
+```ts title="inspect.ts"
 const { result, trace } = await withTrace("my_trace", async () => {
   return run(agent, "Hello");
 });
@@ -102,4 +102,6 @@ for (const span of trace.spans) {
 
 ## Zero Overhead
 
+<Callout type="info">
 When `withTrace()` is not used, `getCurrentTrace()` returns `undefined` and all tracing code paths are skipped. There is no performance cost for tracing when it's not active.
+</Callout>

@@ -9,7 +9,7 @@ Guardrails validate agent input and output, allowing you to block harmful or inv
 
 Input guardrails run before the model is called. They check the user's message:
 
-```ts
+```ts title="input-guardrail.ts"
 import { Agent, run } from "stratus/core";
 import type { InputGuardrail } from "stratus/core";
 
@@ -24,7 +24,7 @@ const noPersonalInfo: InputGuardrail = {
 const agent = new Agent({
   name: "assistant",
   model,
-  inputGuardrails: [noPersonalInfo],
+  inputGuardrails: [noPersonalInfo], // [!code highlight]
 });
 ```
 
@@ -32,7 +32,7 @@ const agent = new Agent({
 
 Output guardrails run after the model responds. They check the model's output:
 
-```ts
+```ts title="output-guardrail.ts"
 import type { OutputGuardrail } from "stratus/core";
 
 const noCodeInOutput: OutputGuardrail = {
@@ -46,13 +46,13 @@ const noCodeInOutput: OutputGuardrail = {
 const agent = new Agent({
   name: "assistant",
   model,
-  outputGuardrails: [noCodeInOutput],
+  outputGuardrails: [noCodeInOutput], // [!code highlight]
 });
 ```
 
 ## Guardrail Interface
 
-```ts
+```ts title="types.ts"
 interface InputGuardrail<TContext = unknown> {
   name: string;
   execute: (input: string, context: TContext) => GuardrailResult | Promise<GuardrailResult>;
@@ -73,7 +73,7 @@ interface GuardrailResult {
 
 When a guardrail triggers, it throws an error that you can catch:
 
-```ts
+```ts title="error-handling.ts"
 import {
   InputGuardrailTripwireTriggered,
   OutputGuardrailTripwireTriggered,
@@ -96,7 +96,7 @@ try {
 
 Guardrails receive the same context as tools:
 
-```ts
+```ts title="context-guardrail.ts"
 const tenantGuardrail: InputGuardrail<AppContext> = {
   name: "tenant_check",
   execute: async (input, ctx) => {
@@ -108,7 +108,7 @@ const tenantGuardrail: InputGuardrail<AppContext> = {
 
 ## Guardrails in Sessions
 
-```ts
+```ts title="session-guardrails.ts"
 const session = createSession({
   model,
   inputGuardrails: [noPersonalInfo],
@@ -116,9 +116,17 @@ const session = createSession({
 });
 ```
 
-## Execution Behavior
+## Execution Details
 
-- **Input guardrails** run in parallel on the entry agent before any model calls
-- **Output guardrails** run in parallel on the current agent (which may differ from the entry agent after handoffs)
-- Multiple guardrails run concurrently via `Promise.all`
-- The first triggered tripwire throws immediately
+<Accordions>
+<Accordion title="When do guardrails run?">
+- **Input guardrails** run on the **entry agent** before the first model call
+- **Output guardrails** run on the **current agent** (which may have changed via handoffs)
+</Accordion>
+<Accordion title="Multiple guardrails">
+When multiple guardrails are defined, they run **in parallel** via `Promise.all`. The first triggered tripwire throws immediately.
+</Accordion>
+<Accordion title="Guardrails and tracing">
+Guardrail execution is recorded as a `"guardrail"` span type when tracing is active.
+</Accordion>
+</Accordions>

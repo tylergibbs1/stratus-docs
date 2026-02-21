@@ -7,7 +7,7 @@ An `Agent` is the central building block of Stratus. It encapsulates a model, sy
 
 ## Creating an Agent
 
-```ts
+```ts title="agent.ts"
 import { Agent } from "stratus/core";
 
 const agent = new Agent({
@@ -26,7 +26,7 @@ The `AgentConfig` interface accepts these properties:
 | `name` | `string` | **Required.** Agent name, used in handoff tool names and tracing |
 | `instructions` | `string \| (ctx) => string` | System prompt — can be a string or async function |
 | `model` | `Model` | LLM model to use |
-| `tools` | `FunctionTool[]` | Available tools |
+| `tools` | `FunctionTool[]` | Available [tools](/docs/tools) |
 | `subagents` | `SubAgent[]` | [Sub-agents](/docs/subagents) that run as tool calls |
 | `modelSettings` | `ModelSettings` | Temperature, max tokens, etc. |
 | `outputType` | `z.ZodType` | Zod schema for [structured output](/docs/structured-output) |
@@ -40,12 +40,12 @@ The `AgentConfig` interface accepts these properties:
 
 Instructions can be a function that receives the context and returns a string. This lets you customize the system prompt per-request:
 
-```ts
+```ts title="dynamic-instructions.ts"
 const agent = new Agent({
   name: "assistant",
   model,
-  instructions: (ctx: { language: string }) =>
-    `You are a helpful assistant. Respond in ${ctx.language}.`,
+  instructions: (ctx: { language: string }) => // [!code highlight]
+    `You are a helpful assistant. Respond in ${ctx.language}.`, // [!code highlight]
 });
 
 await run(agent, "Hello", { context: { language: "Spanish" } });
@@ -64,7 +64,7 @@ instructions: async (ctx) => {
 
 Fine-tune model behavior with `modelSettings`:
 
-```ts
+```ts title="settings.ts"
 const agent = new Agent({
   name: "creative-writer",
   model,
@@ -76,11 +76,9 @@ const agent = new Agent({
 });
 ```
 
-Available settings:
-
 | Setting | Type | Description |
 | --- | --- | --- |
-| `temperature` | `number` | Sampling temperature (0–2) |
+| `temperature` | `number` | Sampling temperature (0-2) |
 | `topP` | `number` | Nucleus sampling threshold |
 | `maxTokens` | `number` | Maximum tokens to generate |
 | `stop` | `string[]` | Stop sequences |
@@ -112,16 +110,35 @@ modelSettings: { toolChoice: "none" }
 
 Control what happens after tool calls execute:
 
+<Tabs items={["run_llm_again", "stop_on_first_tool", "stopAtToolNames"]}>
+<Tab value="run_llm_again">
+
+Default behavior — send tool results back to the model for another response:
+
 ```ts
-// Default: send tool results back to the model for another response
 toolUseBehavior: "run_llm_again"
+```
 
-// Stop and return tool output as the final result
+</Tab>
+<Tab value="stop_on_first_tool">
+
+Stop and return tool output as the final result:
+
+```ts
 toolUseBehavior: "stop_on_first_tool"
+```
 
-// Stop only for specific tools
+</Tab>
+<Tab value="stopAtToolNames">
+
+Stop only for specific tools:
+
+```ts
 toolUseBehavior: { stopAtToolNames: ["final_answer"] }
 ```
+
+</Tab>
+</Tabs>
 
 ## Cloning Agents
 
@@ -133,4 +150,6 @@ const spanishAgent = agent.clone({
 });
 ```
 
-All properties not in the override are preserved from the original.
+<Callout type="info">
+All properties not in the override are preserved from the original, including tools, subagents, hooks, guardrails, and handoffs.
+</Callout>

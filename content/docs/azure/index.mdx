@@ -7,7 +7,7 @@ Stratus includes a built-in Azure OpenAI Chat Completions implementation with st
 
 ## Configuration
 
-```ts
+```ts title="model.ts"
 import { AzureChatCompletionsModel } from "stratus";
 
 const model = new AzureChatCompletionsModel({
@@ -46,22 +46,24 @@ const result = await prompt("Hello", { model });
 
 Any model provider can be used with Stratus by implementing the `Model` interface:
 
-```ts
+```ts title="model-interface.ts"
 interface Model {
   getResponse(request: ModelRequest, options?: ModelRequestOptions): Promise<ModelResponse>;
   getStreamedResponse(request: ModelRequest, options?: ModelRequestOptions): AsyncIterable<StreamEvent>;
 }
 
 interface ModelRequestOptions {
-  signal?: AbortSignal;
+  signal?: AbortSignal; // [!code highlight]
 }
 ```
 
+<Callout type="info">
 The `options` parameter is optional and backward compatible. When provided, `signal` is used for request cancellation.
+</Callout>
 
 ### ModelRequest
 
-```ts
+```ts title="types.ts"
 interface ModelRequest {
   messages: ChatMessage[];
   tools?: ToolDefinition[];
@@ -72,28 +74,30 @@ interface ModelRequest {
 
 ### ModelResponse
 
-```ts
+```ts title="types.ts"
 interface ModelResponse {
   content: string | null;
   toolCalls: ToolCall[];
   usage?: UsageInfo;
-  finishReason?: string;
+  finishReason?: string; // [!code highlight]
 }
 ```
 
 ### UsageInfo
 
-```ts
+```ts title="types.ts"
 interface UsageInfo {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
-  cacheReadTokens?: number;
-  cacheCreationTokens?: number;
+  cacheReadTokens?: number; // [!code highlight]
+  cacheCreationTokens?: number; // [!code highlight]
 }
 ```
 
+<Callout>
 Cache token fields are populated when the Azure API returns `prompt_tokens_details.cached_tokens`. They're `undefined` when caching is not active.
+</Callout>
 
 ## Authentication
 
@@ -110,7 +114,7 @@ The Azure model throws specific errors for different failure modes:
 - **`ModelError`** — General API errors (4xx/5xx responses)
 - **`ContentFilterError`** — Azure content filter blocked the request or response
 
-```ts
+```ts title="error-handling.ts"
 import { ModelError, ContentFilterError } from "stratus/core";
 
 try {
