@@ -1,4 +1,4 @@
 {
 	"title": "Guides",
-	"pages": ["customer-support-agent", "research-agent", "data-extraction"]
+	"pages": ["agentic-tool-use", "real-time-streaming", "customer-support-agent", "research-agent", "data-extraction"]
 }

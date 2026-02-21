@@ -3,35 +3,73 @@ title: "Guide: Customer Support Agent"
 description: Build a multi-agent customer support system with triage, handoffs, and hooks
 ---
 
-Build a customer support system where a triage agent routes users to specialized agents. This guide covers handoffs, tools, hooks for audit logging, and guardrails for input validation.
+Route customer requests to specialized agents with tools, audit every handoff with hooks, and enforce guardrails on input. This guide walks you through a production-ready triage system from scratch.
 
-## What you'll build
+You will learn how to:
 
-<Cards>
-  <Card title="Triage Agent">
-    Routes incoming requests to the right specialist
-  </Card>
-  <Card title="Order Agent">
-    Looks up orders and provides status updates
-  </Card>
-  <Card title="Refund Agent">
-    Processes refund requests with approval controls
-  </Card>
-</Cards>
+- **Route with handoffs** -- build a triage agent that transfers customers to the right specialist
+- **Add domain tools** -- give each specialist agent tools for order lookup, refund processing, and more
+- **Audit with hooks** -- log every handoff, tool call, and resolution for compliance
+- **Enforce guardrails** -- block toxic input before it reaches your agents
+- **Control permissions** -- deny high-value refunds that need manager approval
+- **Persist conversations** -- save and resume support sessions across shifts
+
+## Quick start
+
+Here is a minimal working example. A triage agent routes to an order specialist and a refund specialist:
+
+```ts title="quick-start.ts"
+import { Agent, run } from "stratus/core";
+import { AzureResponsesModel } from "stratus";
+
+const model = new AzureResponsesModel({ deployment: "gpt-5.2" });
+
+const orderAgent = new Agent({
+  name: "order_specialist",
+  model,
+  instructions: "You help customers with order status and tracking.",
+  handoffDescription: "Transfer here for order questions", // [!code highlight]
+});
+
+const refundAgent = new Agent({
+  name: "refund_specialist",
+  model,
+  instructions: "You help customers with refunds. Always check eligibility first.",
+  handoffDescription: "Transfer here for refund requests", // [!code highlight]
+});
+
+const triageAgent = new Agent({
+  name: "triage",
+  model,
+  instructions: `You are a customer support triage agent. Greet the customer,
+    understand their issue, and transfer to the right specialist.
+    - Order questions -> order_specialist
+    - Refund requests -> refund_specialist`,
+  handoffs: [orderAgent, refundAgent], // [!code highlight]
+});
+
+const result = await run(triageAgent, "I need to return order ORD-12345");
+console.log(result.output);
+console.log(`Handled by: ${result.lastAgent.name}`);
+```
+
+The rest of this guide adds tools, hooks, guardrails, and session support on top of this foundation.
 
 ## Architecture
 
 ```
-User → Triage Agent → Order Agent (tools: lookupOrder, trackShipment)
-                    → Refund Agent (tools: processRefund, checkEligibility)
+User -> Triage Agent -> Order Agent (tools: lookupOrder, trackShipment)
+                     -> Refund Agent (tools: processRefund, checkEligibility)
 ```
 
-## Step 1: Define your tools
+## Define your tools
 
 <Steps>
 <Step>
 
 ### Order lookup tool
+
+Give the order specialist a tool to fetch order details from your database:
 
 ```ts title="tools.ts"
 import { tool } from "stratus/core";
@@ -61,6 +99,8 @@ const lookupOrder = tool({
 
 ### Refund eligibility tool
 
+Check whether an order falls within the refund window before processing:
+
 ```ts title="tools.ts"
 const checkEligibility = tool({
   name: "check_refund_eligibility",
@@ -73,7 +113,11 @@ const checkEligibility = tool({
     if (!order) return "Order not found";
     const daysSincePurchase = daysBetween(order.createdAt, new Date());
     const eligible = daysSincePurchase <= 30 && order.status !== "refunded";
-    return JSON.stringify({ eligible, daysSincePurchase, reason: eligible ? null : "Past 30-day window or already refunded" });
+    return JSON.stringify({
+      eligible,
+      daysSincePurchase,
+      reason: eligible ? null : "Past 30-day window or already refunded",
+    });
   },
 });
 ```
@@ -81,7 +125,9 @@ const checkEligibility = tool({
 </Step>
 </Steps>
 
-## Step 2: Create specialist agents
+## Create specialist agents
+
+Each specialist gets its own tools and a `handoffDescription` that tells the triage agent when to route to it:
 
 ```ts title="agents.ts"
 import { Agent } from "stratus/core";
@@ -105,7 +151,13 @@ const refundAgent = new Agent<AppContext>({
 });
 ```
 
-## Step 3: Create the triage agent with hooks
+<Callout type="info">
+The `handoffDescription` is injected into the triage agent's tool definitions. Write it from the triage agent's perspective -- describe _when_ to transfer, not what the specialist does internally.
+</Callout>
+
+## Create the triage agent with hooks
+
+Hooks let you observe and control the agent lifecycle. Here, `beforeHandoff` logs every transfer to an audit table and `afterRun` records the resolution:
 
 ```ts title="triage.ts"
 import { Agent, run } from "stratus/core";
@@ -116,8 +168,8 @@ const triageAgent = new Agent<AppContext>({
   model,
   instructions: `You are a customer support triage agent. Greet the customer,
     understand their issue, and transfer them to the right specialist.
-    - Order questions → order_specialist
-    - Refund requests → refund_specialist
+    - Order questions -> order_specialist
+    - Refund requests -> refund_specialist
     If unclear, ask a clarifying question.`,
   handoffs: [orderAgent, refundAgent],
   hooks: {
@@ -143,7 +195,13 @@ const triageAgent = new Agent<AppContext>({
 });
 ```
 
-## Step 4: Add input guardrails
+<Callout type="warn">
+Hooks run inline in the agent loop. Keep them fast -- offload heavy work (analytics, notifications) to a background queue rather than awaiting it directly.
+</Callout>
+
+## Add input guardrails
+
+Guardrails run in parallel with the first model call and trip a wire if the input is problematic. Add a toxicity check to reject abusive messages before they reach any agent:
 
 ```ts title="guardrails.ts"
 import type { InputGuardrail } from "stratus/core";
@@ -156,14 +214,19 @@ const toxicityGuard: InputGuardrail<AppContext> = {
   }),
 };
 
-// Add to the triage agent
 const triageAgent = new Agent<AppContext>({
   // ...same config as above
   inputGuardrails: [toxicityGuard], // [!code highlight]
 });
 ```
 
-## Step 5: Run as a session
+<Callout type="info">
+Input guardrails only run on the _entry_ agent. After a handoff, the specialist agent's own guardrails (if any) take over.
+</Callout>
+
+## Run as a session
+
+Wrap everything in a session for multi-turn conversations. The session maintains message history and context across turns:
 
 ```ts title="main.ts"
 import { createSession } from "stratus/core";
@@ -190,9 +253,11 @@ const result = await session.result;
 console.log(`\nHandled by: ${result.lastAgent.name}`);
 ```
 
-## Adding permission control
+## Advanced patterns
 
-Use hook decisions to require approval for high-value refunds:
+### Permission control for high-value actions
+
+Use `beforeToolCall` hook decisions to require approval for high-value refunds. Return `"deny"` with a reason and the model receives the denial as a tool result:
 
 ```ts title="permission-hooks.ts"
 hooks: {
@@ -210,11 +275,13 @@ hooks: {
 }
 ```
 
-## Save and resume conversations
-
 <Callout type="info">
-Use session save/resume to persist support conversations across server restarts or to hand off between shifts.
+Hook decisions support three modes: `"allow"` (default), `"deny"` (block with reason), and `"modify"` (rewrite the tool call arguments). See the [Hooks reference](/docs/hooks) for full details.
 </Callout>
+
+### Save and resume conversations
+
+Persist support conversations across server restarts or shift changes with `save()` and `resumeSession()`:
 
 ```ts title="persistence.ts"
 // Save at end of shift
@@ -227,6 +294,10 @@ const resumed = resumeSession(saved, { model, ...config });
 resumed.send("I'm a different agent, picking up where my colleague left off.");
 ```
 
+<Callout type="warn">
+Session snapshots include the full message history. For long conversations, consider trimming older messages before saving to stay within token limits.
+</Callout>
+
 ## Next steps
 
 <Cards>
@@ -238,5 +309,8 @@ resumed.send("I'm a different agent, picking up where my colleague left off.");
   </Card>
   <Card title="Guardrails" href="/docs/guardrails">
     Input and output validation
+  </Card>
+  <Card title="Sessions" href="/docs/sessions">
+    Multi-turn conversations with save/resume
   </Card>
 </Cards>

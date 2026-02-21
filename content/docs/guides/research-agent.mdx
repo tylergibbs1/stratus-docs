@@ -3,11 +3,69 @@ title: "Guide: Research Agent"
 description: Build an agent that delegates research tasks to specialized subagents
 ---
 
-Build a research agent that breaks down complex questions and delegates to specialized subagents. Each subagent focuses on a specific domain, reports back, and the parent synthesizes the findings.
+Build a research orchestrator that breaks complex questions into subtasks and delegates them to specialized subagents. Each subagent runs independently with its own tools, reports back, and the parent synthesizes the findings into a single answer.
+
+In this guide, you will:
+
+- **Define specialized tools** for web search, page fetching, and data analysis
+- **Create focused subagents** that each handle one research domain
+- **Wire subagents to a parent** using `subagent()` with typed input schemas
+- **Add structured output** to get typed, machine-readable reports
+- **Trace execution** to see which subagents ran and how long they took
+- **Cancel gracefully** with abort signals that propagate to every subagent
+
+## Quick start
+
+Here is a minimal research agent with a single subagent. The full guide breaks this pattern into composable pieces.
+
+```ts title="quick-start.ts"
+import { Agent, run, subagent, tool } from "stratus/core";
+import { AzureResponsesModel } from "stratus";
+import { z } from "zod";
+
+const model = new AzureResponsesModel({
+  endpoint: process.env.AZURE_ENDPOINT!,
+  apiKey: process.env.AZURE_API_KEY!,
+  deployment: "gpt-5.2",
+});
+
+const webSearch = tool({
+  name: "web_search",
+  description: "Search the web for information",
+  parameters: z.object({ query: z.string() }),
+  execute: async (_ctx, { query }) => {
+    const results = await searchAPI(query);
+    return JSON.stringify(results.slice(0, 5));
+  },
+});
+
+const researcher = new Agent({
+  name: "web_researcher",
+  model,
+  instructions: "Search for information and return key facts with source URLs.",
+  tools: [webSearch],
+});
+
+const researchSubagent = subagent({ // [!code highlight]
+  agent: researcher, // [!code highlight]
+  inputSchema: z.object({ topic: z.string() }), // [!code highlight]
+  mapInput: (params) => `Research: ${params.topic}`, // [!code highlight]
+}); // [!code highlight]
+
+const orchestrator = new Agent({
+  name: "orchestrator",
+  model,
+  instructions: "Break questions into sub-questions. Use run_web_researcher for each.",
+  subagents: [researchSubagent], // [!code highlight]
+});
+
+const result = await run(orchestrator, "What is the current state of renewable energy?");
+console.log(result.output);
+```
 
 ## What you'll build
 
-A parent agent that delegates to:
+A parent orchestrator that delegates to three domain-specific subagents:
 
 <Cards>
   <Card title="Web Researcher">
@@ -23,7 +81,7 @@ A parent agent that delegates to:
 
 ## Step 1: Define subagent tools
 
-Each subagent gets its own specialized tools:
+Each subagent gets its own specialized tools. Keep tool sets small and focused -- a subagent with fewer tools produces more reliable results.
 
 ```ts title="tools.ts"
 import { tool } from "stratus/core";
@@ -66,7 +124,13 @@ const calculate = tool({
 });
 ```
 
+<Callout type="info">
+The `fetchPage` tool forwards `options.signal` to `fetch()`. When the parent run is cancelled, the HTTP request cancels too. See [Cancellation with abort signal](#cancellation-with-abort-signal) below.
+</Callout>
+
 ## Step 2: Create subagent definitions
+
+Define one agent per research domain. Each gets a focused instruction set and only the tools it needs.
 
 ```ts title="subagents.ts"
 import { Agent, subagent } from "stratus/core";
@@ -96,7 +160,13 @@ const summarizer = new Agent({
 });
 ```
 
+<Callout type="info">
+The summarizer has no tools. It only needs the model to restructure and condense text. Not every subagent needs tool access.
+</Callout>
+
 ## Step 3: Wire subagents to the parent
+
+Use `subagent()` to create typed bridges between the parent and each child agent. The `inputSchema` defines what the model passes in, and `mapInput` converts those parameters into a prompt string.
 
 ```ts title="research-agent.ts"
 const researchSubagent = subagent({
@@ -127,6 +197,8 @@ const summarySubagent = subagent({
 
 ## Step 4: Create the orchestrator
 
+The parent agent sees each subagent as a callable tool named `run_<agent_name>`. Its instructions tell it when and how to use each one.
+
 ```ts title="orchestrator.ts"
 import { Agent, run } from "stratus/core";
 
@@ -150,9 +222,13 @@ const result = await run(
 console.log(result.output);
 ```
 
+<Callout type="warn">
+Subagent names become tool names prefixed with `run_`. If your agent is named `web_researcher`, the parent calls it as `run_web_researcher`. Keep names short and descriptive.
+</Callout>
+
 ## Adding structured output
 
-Get results in a structured format for downstream processing:
+Get results in a typed format for downstream processing. Set `outputType` on the orchestrator to a Zod schema, and `result.finalOutput` is fully typed.
 
 ```ts title="structured.ts"
 const ReportSchema = z.object({
@@ -181,9 +257,13 @@ const result = await run(researchOrchestrator, "...");
 console.log(result.finalOutput.keyFindings); // Typed array
 ```
 
+<Callout type="info">
+When using `outputType` with subagents, the model calls subagents first, then produces the structured JSON in its final response. The subagents themselves return unstructured text unless they also have their own `outputType`.
+</Callout>
+
 ## Adding tracing
 
-Monitor how subagents are being used:
+Monitor which subagents run and how long each takes. Wrap the `run()` call in `withTrace()` and inspect the resulting spans.
 
 ```ts title="traced.ts"
 import { withTrace } from "stratus/core";
@@ -207,7 +287,7 @@ for (const span of subagentSpans) {
 
 ## Cancellation with abort signal
 
-Cancel long-running research if the user navigates away:
+Cancel long-running research when the user disconnects. The signal propagates through the orchestrator, into every active subagent, and down to their tool executions.
 
 ```ts title="cancellable.ts"
 const ac = new AbortController();
@@ -228,7 +308,7 @@ try {
 ```
 
 <Callout type="info">
-The abort signal propagates through to all subagent runs and their tool executions, so everything cancels cleanly.
+The abort signal propagates through to all subagent runs and their tool executions, so everything cancels cleanly. You do not need to wire up signals for each subagent individually.
 </Callout>
 
 ## Next steps

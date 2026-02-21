@@ -1,0 +1,756 @@
+---
+title: "Guide: Agentic Tool Use"
+description: Build agents that autonomously call tools, handle results, and loop until done
+---
+
+Agentic tool use is the pattern where a model decides which tools to call, interprets the results, and keeps looping until it has enough information to answer. Instead of you writing `if/else` dispatch logic, the model drives the entire flow. You define the tools, call `run()`, and Stratus handles everything in between.
+
+In this guide you will learn:
+
+- **How the tool loop works** — the cycle of model call, tool execution, and result injection that powers autonomous agents
+- **Parallel tool calls** — how the model can call multiple tools in a single turn
+- **Controlling tool behavior** — `toolChoice` and `toolUseBehavior` for fine-grained control over when and how tools run
+- **Error recovery** — what happens when a tool throws, and how the model adapts
+- **Streaming with tools** — real-time events during multi-turn tool execution
+- **Context passing** — injecting database clients, API keys, and user info into tools
+- **Cancellation** — propagating `AbortSignal` to long-running tool calls
+
+## How the tool loop works
+
+When you call `run()`, Stratus enters an autonomous loop. The model decides what to do next at every step.
+
+<Steps>
+<Step>
+
+### Model call
+
+Stratus sends the conversation history and tool definitions to the model. The model either responds with text (done) or requests one or more tool calls.
+
+</Step>
+<Step>
+
+### Argument parsing and validation
+
+Stratus parses the JSON arguments from each tool call and validates them against the tool's Zod schema. If parsing fails, the error is sent back to the model so it can retry.
+
+</Step>
+<Step>
+
+### Tool execution
+
+Each tool's `execute` function runs with the validated parameters and shared context. If the model requested multiple tools, they run in parallel.
+
+</Step>
+<Step>
+
+### Results injected
+
+Tool results are added to the message history as tool messages, one per tool call.
+
+</Step>
+<Step>
+
+### Loop or finish
+
+Stratus sends the updated message history back to the model. The model can call more tools, or respond with a final text answer. This repeats until the model stops calling tools or the max turn limit is reached.
+
+</Step>
+</Steps>
+
+<Callout type="info">
+Stratus handles this entire loop automatically. You define tools and call `run()` — the SDK manages message passing, JSON parsing, validation, retries, and multi-round execution.
+</Callout>
+
+## Quick start
+
+Define a tool with `tool()`, attach it to an agent, and call `run()`. The model decides when to call the tool and what to do with the result.
+
+```ts title="quick-start.ts"
+import { AzureResponsesModel } from "stratus";
+import { Agent, run, tool } from "stratus/core";
+import { z } from "zod";
+
+const model = new AzureResponsesModel({
+  endpoint: process.env.AZURE_ENDPOINT!,
+  apiKey: process.env.AZURE_API_KEY!,
+  deployment: "gpt-5.2",
+});
+
+const getWeather = tool({
+  name: "get_weather",
+  description: "Get the current weather for a city",
+  parameters: z.object({
+    city: z.string().describe("City name"),
+  }),
+  execute: async (_ctx, { city }) => { // [!code highlight]
+    const response = await fetch(
+      `https://api.weather.example/v1/current?city=${encodeURIComponent(city)}`
+    );
+    const data = await response.json();
+    return `${data.temp}°F, ${data.condition} in ${city}`;
+  },
+});
+
+const agent = new Agent({
+  name: "weather_assistant",
+  model,
+  instructions: "You are a helpful weather assistant.",
+  tools: [getWeather], // [!code highlight]
+});
+
+const result = await run(agent, "What's the weather in Seattle?");
+console.log(result.output);
+// "The current weather in Seattle is 58°F and cloudy."
+```
+
+Behind the scenes, `run()` made two model calls: one that triggered `get_weather`, and one that produced the final answer using the tool result. You wrote zero dispatch logic.
+
+## Parallel tool calls
+
+When the model needs information from multiple sources, it can call several tools at once. Stratus executes them in parallel and sends all results back in one batch.
+
+```ts title="parallel-tools.ts"
+import { AzureResponsesModel } from "stratus";
+import { Agent, run, tool } from "stratus/core";
+import { z } from "zod";
+
+const model = new AzureResponsesModel({
+  endpoint: process.env.AZURE_ENDPOINT!,
+  apiKey: process.env.AZURE_API_KEY!,
+  deployment: "gpt-5.2",
+});
+
+const getWeather = tool({
+  name: "get_weather",
+  description: "Get the current weather for a city",
+  parameters: z.object({
+    city: z.string().describe("City name"),
+  }),
+  execute: async (_ctx, { city }) => {
+    const response = await fetch(
+      `https://api.weather.example/v1/current?city=${encodeURIComponent(city)}`
+    );
+    const data = await response.json();
+    return `${data.temp}°F, ${data.condition}`;
+  },
+});
+
+const agent = new Agent({
+  name: "weather_assistant",
+  model,
+  tools: [getWeather],
+});
+
+// The model calls get_weather 3 times in parallel
+const result = await run(
+  agent,
+  "What's the weather in Tokyo, London, and New York?"
+);
+console.log(result.output);
+```
+
+The model sees all three results at once and produces a single response comparing the three cities. No sequential round-trips needed.
+
+<Callout type="info">
+Parallel tool calls are a model behavior, not something you configure. The model decides when to batch calls based on the prompt. You can disable this with `modelSettings: { parallelToolCalls: false }` if you need sequential execution.
+</Callout>
+
+## Multi-tool agents
+
+Most real agents have multiple tools. The model picks the right tool based on the user's request. You don't need routing logic.
+
+```ts title="multi-tool.ts"
+import { AzureResponsesModel } from "stratus";
+import { Agent, run, tool } from "stratus/core";
+import { z } from "zod";
+
+const model = new AzureResponsesModel({
+  endpoint: process.env.AZURE_ENDPOINT!,
+  apiKey: process.env.AZURE_API_KEY!,
+  deployment: "gpt-5.2",
+});
+
+const searchProducts = tool({
+  name: "search_products",
+  description: "Search the product catalog by keyword",
+  parameters: z.object({
+    query: z.string().describe("Search keywords"),
+    maxResults: z.number().optional().describe("Max results to return"),
+  }),
+  execute: async (_ctx, { query, maxResults }) => {
+    const results = await productDB.search(query, maxResults ?? 5);
+    return JSON.stringify(results);
+  },
+});
+
+const getProductDetails = tool({
+  name: "get_product_details",
+  description: "Get detailed information about a product by ID",
+  parameters: z.object({
+    productId: z.string().describe("The product ID"),
+  }),
+  execute: async (_ctx, { productId }) => {
+    const product = await productDB.findById(productId);
+    if (!product) return "Product not found";
+    return JSON.stringify(product);
+  },
+});
+
+const checkInventory = tool({
+  name: "check_inventory",
+  description: "Check if a product is in stock at a specific warehouse",
+  parameters: z.object({
+    productId: z.string(),
+    warehouseId: z.string().describe("Warehouse ID, e.g. 'us-west-1'"),
+  }),
+  execute: async (_ctx, { productId, warehouseId }) => {
+    const stock = await inventoryAPI.check(productId, warehouseId);
+    return JSON.stringify({ inStock: stock.available, quantity: stock.count });
+  },
+});
+
+const calculateShipping = tool({
+  name: "calculate_shipping",
+  description: "Calculate shipping cost and estimated delivery date",
+  parameters: z.object({
+    productId: z.string(),
+    zipCode: z.string().describe("Destination ZIP code"),
+  }),
+  execute: async (_ctx, { productId, zipCode }) => {
+    const estimate = await shippingAPI.estimate(productId, zipCode);
+    return JSON.stringify(estimate);
+  },
+});
+
+const agent = new Agent({
+  name: "shopping_assistant",
+  model,
+  instructions: `You are a shopping assistant. Help customers find products,
+    check availability, and get shipping estimates. Be concise and helpful.`,
+  tools: [searchProducts, getProductDetails, checkInventory, calculateShipping], // [!code highlight]
+});
+
+const result = await run(
+  agent,
+  "I'm looking for a USB-C monitor. Is the top result in stock? How fast can it ship to 98101?"
+);
+console.log(result.output);
+```
+
+The model might call `search_products` first, then `check_inventory` and `calculate_shipping` in parallel on the top result. Stratus handles the multi-turn orchestration automatically.
+
+## Controlling tool behavior
+
+### toolChoice
+
+`toolChoice` tells the model whether and how to use tools. Set it via `modelSettings` on the agent.
+
+<Tabs items={["auto", "required", "none", "specific function"]}>
+<Tab value="auto">
+
+The default. The model decides whether to call a tool or respond with text.
+
+```ts title="tool-choice-auto.ts"
+const agent = new Agent({
+  name: "assistant",
+  model,
+  tools: [getWeather],
+  modelSettings: {
+    toolChoice: "auto", // default — model decides
+  },
+});
+```
+
+</Tab>
+<Tab value="required">
+
+Force the model to call at least one tool. Useful when you always want tool execution.
+
+```ts title="tool-choice-required.ts"
+const agent = new Agent({
+  name: "data_fetcher",
+  model,
+  tools: [fetchData, queryDatabase],
+  modelSettings: {
+    toolChoice: "required", // [!code highlight]
+  },
+});
+```
+
+</Tab>
+<Tab value="none">
+
+Prevent the model from calling any tools, even if tools are defined. Useful for a "summarize what you know" follow-up.
+
+```ts title="tool-choice-none.ts"
+const agent = new Agent({
+  name: "assistant",
+  model,
+  tools: [getWeather],
+  modelSettings: {
+    toolChoice: "none", // [!code highlight]
+  },
+});
+```
+
+</Tab>
+<Tab value="specific function">
+
+Force the model to call a specific tool by name.
+
+```ts title="tool-choice-specific.ts"
+const agent = new Agent({
+  name: "classifier",
+  model,
+  tools: [classifyIntent],
+  modelSettings: {
+    toolChoice: { // [!code highlight]
+      type: "function", // [!code highlight]
+      function: { name: "classify_intent" }, // [!code highlight]
+    }, // [!code highlight]
+  },
+});
+```
+
+</Tab>
+</Tabs>
+
+### toolUseBehavior
+
+`toolUseBehavior` controls what happens *after* a tool executes. By default, results go back to the model for another turn. You can change this to stop early.
+
+<Tabs items={["run_llm_again", "stop_on_first_tool", "stopAtToolNames"]}>
+<Tab value="run_llm_again">
+
+The default. After tool execution, the model gets the results and decides what to do next.
+
+```ts title="behavior-default.ts"
+const agent = new Agent({
+  name: "assistant",
+  model,
+  tools: [getWeather],
+  toolUseBehavior: "run_llm_again", // default
+});
+```
+
+</Tab>
+<Tab value="stop_on_first_tool">
+
+Stop immediately after the first tool call. The tool's return value becomes the run output. No second model call. Useful when the tool produces the final answer directly.
+
+```ts title="behavior-stop.ts"
+const agent = new Agent({
+  name: "calculator",
+  model,
+  tools: [calculate],
+  toolUseBehavior: "stop_on_first_tool", // [!code highlight]
+});
+
+const result = await run(agent, "What is 42 * 17?");
+console.log(result.output); // "714" — raw tool output, no model summary
+```
+
+</Tab>
+<Tab value="stopAtToolNames">
+
+Stop only when specific tools are called. Other tools loop normally.
+
+```ts title="behavior-stop-at.ts"
+const agent = new Agent({
+  name: "order_agent",
+  model,
+  tools: [lookupOrder, processRefund, sendConfirmation],
+  toolUseBehavior: { // [!code highlight]
+    stopAtToolNames: ["send_confirmation"], // [!code highlight]
+  }, // [!code highlight]
+});
+
+// lookupOrder and processRefund loop back to the model.
+// sendConfirmation stops the run and returns its output directly.
+```
+
+</Tab>
+</Tabs>
+
+<Callout type="warn">
+When `toolUseBehavior` stops early, `result.output` contains the raw tool output string, not a model-generated response. The model does not get a chance to summarize or format the result.
+</Callout>
+
+## Tool errors and recovery
+
+When a tool's `execute` function throws, Stratus catches the error and sends the error message back to the model as the tool result. The model sees the error and can adjust — retry with different parameters, try a different tool, or respond to the user with an explanation.
+
+```ts title="error-recovery.ts"
+import { AzureResponsesModel } from "stratus";
+import { Agent, run, tool } from "stratus/core";
+import { z } from "zod";
+
+const model = new AzureResponsesModel({
+  endpoint: process.env.AZURE_ENDPOINT!,
+  apiKey: process.env.AZURE_API_KEY!,
+  deployment: "gpt-5.2",
+});
+
+const lookupUser = tool({
+  name: "lookup_user",
+  description: "Look up a user by email address",
+  parameters: z.object({
+    email: z.string().describe("User email address"),
+  }),
+  execute: async (_ctx, { email }) => {
+    const user = await db.users.findByEmail(email);
+    if (!user) {
+      throw new Error(`No user found with email "${email}". Try a different email.`); // [!code highlight]
+    }
+    return JSON.stringify({ id: user.id, name: user.name, plan: user.plan });
+  },
+});
+
+const agent = new Agent({
+  name: "support",
+  model,
+  tools: [lookupUser],
+});
+
+const result = await run(agent, "Find the account for typo@exmple.com");
+console.log(result.output);
+// The model sees the error, tells the user no account was found,
+// and may ask for the correct email.
+```
+
+The error message format matters. Write error messages that help the model take the right next step. Compare:
+
+- **Bad**: `"Error: ENOENT"` — the model has no idea what to do
+- **Good**: `"No user found with email \"typo@exmple.com\". Try a different email."` — the model can ask the user for the correct email
+
+<Callout type="info">
+Tool errors never crash the run. They flow back to the model as information. Only `MaxTurnsExceededError` and `RunAbortedError` will terminate the loop.
+</Callout>
+
+## Streaming with tools
+
+When you use `stream()`, you receive real-time events during the entire tool loop — including tool call events between model turns.
+
+```ts title="stream-tools.ts"
+import { AzureResponsesModel } from "stratus";
+import { Agent, stream, tool } from "stratus/core";
+import { z } from "zod";
+
+const model = new AzureResponsesModel({
+  endpoint: process.env.AZURE_ENDPOINT!,
+  apiKey: process.env.AZURE_API_KEY!,
+  deployment: "gpt-5.2",
+});
+
+const getWeather = tool({
+  name: "get_weather",
+  description: "Get the current weather for a city",
+  parameters: z.object({ city: z.string() }),
+  execute: async (_ctx, { city }) => {
+    const res = await fetch(
+      `https://api.weather.example/v1/current?city=${encodeURIComponent(city)}`
+    );
+    const data = await res.json();
+    return `${data.temp}°F, ${data.condition}`;
+  },
+});
+
+const agent = new Agent({
+  name: "assistant",
+  model,
+  tools: [getWeather],
+});
+
+const { stream: s, result } = stream(
+  agent,
+  "What's the weather in Portland and Miami?"
+);
+
+for await (const event of s) {
+  switch (event.type) {
+    case "tool_call_start": // [!code highlight]
+      console.log(`\n[Calling ${event.toolCall.name}...]`); // [!code highlight]
+      break; // [!code highlight]
+    case "tool_call_done": // [!code highlight]
+      console.log(`[Done]`); // [!code highlight]
+      break; // [!code highlight]
+    case "content_delta":
+      process.stdout.write(event.content);
+      break;
+    case "done":
+      console.log(`\n\nTokens: ${event.response.usage?.totalTokens}`);
+      break;
+  }
+}
+
+const finalResult = await result;
+console.log(finalResult.output);
+```
+
+A typical event sequence for a tool-using agent:
+
+1. `tool_call_start` — model begins a tool call
+2. `tool_call_delta` — incremental JSON arguments arrive (useful for progress UI)
+3. `tool_call_done` — arguments are complete, execution begins
+4. `done` — first model response is finished, tools execute
+5. `content_delta` — second model turn streams the final answer
+6. `done` — final response complete
+
+You see multiple `done` events in a multi-turn run — one per model call.
+
+## Tools with context
+
+Pass shared resources like database clients, API keys, or user info through the `context` object. This keeps tools pure and testable.
+
+```ts title="context-tools.ts"
+import { AzureResponsesModel } from "stratus";
+import { Agent, run, tool } from "stratus/core";
+import { z } from "zod";
+
+interface AppContext {
+  userId: string;
+  db: Database;
+  apiKeys: { stripe: string; sendgrid: string };
+}
+
+const model = new AzureResponsesModel({
+  endpoint: process.env.AZURE_ENDPOINT!,
+  apiKey: process.env.AZURE_API_KEY!,
+  deployment: "gpt-5.2",
+});
+
+const getOrders = tool({
+  name: "get_orders",
+  description: "Get recent orders for the current user",
+  parameters: z.object({
+    limit: z.number().optional().describe("Max orders to return"),
+  }),
+  execute: async (ctx: AppContext, { limit }) => { // [!code highlight]
+    const orders = await ctx.db.orders.findByUser(ctx.userId, limit ?? 10); // [!code highlight]
+    return JSON.stringify(orders);
+  },
+});
+
+const sendEmail = tool({
+  name: "send_email",
+  description: "Send an email notification to the current user",
+  parameters: z.object({
+    subject: z.string(),
+    body: z.string(),
+  }),
+  execute: async (ctx: AppContext, { subject, body }) => {
+    const user = await ctx.db.users.findById(ctx.userId);
+    await sendgrid.send({
+      to: user.email,
+      subject,
+      body,
+      apiKey: ctx.apiKeys.sendgrid, // [!code highlight]
+    });
+    return `Email sent to ${user.email}`;
+  },
+});
+
+const agent = new Agent<AppContext>({
+  name: "account_assistant",
+  model,
+  instructions: "You help users manage their account and orders.",
+  tools: [getOrders, sendEmail],
+});
+
+const result = await run(agent, "Show me my last 3 orders", {
+  context: { // [!code highlight]
+    userId: "user_abc123", // [!code highlight]
+    db: database, // [!code highlight]
+    apiKeys: { stripe: STRIPE_KEY, sendgrid: SENDGRID_KEY }, // [!code highlight]
+  }, // [!code highlight]
+});
+console.log(result.output);
+```
+
+The context object is passed to every tool's `execute` function as the first argument. Type it with a generic on `Agent<AppContext>` for full type safety.
+
+## Abort signal
+
+Pass an `AbortSignal` to cancel a running agent. The signal propagates to every tool's `execute` function, so you can cancel long-running operations like HTTP requests or database queries.
+
+```ts title="abort-tools.ts"
+import { AzureResponsesModel } from "stratus";
+import { Agent, run, tool, RunAbortedError } from "stratus/core";
+import { z } from "zod";
+
+const model = new AzureResponsesModel({
+  endpoint: process.env.AZURE_ENDPOINT!,
+  apiKey: process.env.AZURE_API_KEY!,
+  deployment: "gpt-5.2",
+});
+
+const fetchDocs = tool({
+  name: "fetch_docs",
+  description: "Fetch documentation from a URL",
+  parameters: z.object({ url: z.string() }),
+  execute: async (_ctx, { url }, options) => {
+    const res = await fetch(url, {
+      signal: options?.signal, // [!code highlight]
+    });
+    return await res.text();
+  },
+});
+
+const agent = new Agent({
+  name: "docs_assistant",
+  model,
+  tools: [fetchDocs],
+});
+
+const controller = new AbortController();
+
+// Cancel after 10 seconds
+setTimeout(() => controller.abort(), 10_000);
+
+try {
+  const result = await run(agent, "Summarize the docs at https://example.com/api", {
+    signal: controller.signal, // [!code highlight]
+  });
+  console.log(result.output);
+} catch (error) {
+  if (error instanceof RunAbortedError) {
+    console.log("Run was cancelled");
+  }
+}
+```
+
+The abort signal is checked between every model call and tool execution. When aborted mid-tool, any in-flight `fetch` calls using the signal are cancelled immediately.
+
+## Compared to raw API calls
+
+<Callout type="info">
+Without Stratus, function calling requires you to manually manage the message array, parse JSON arguments, dispatch to functions by name, and make multiple API calls in a loop. Stratus eliminates all of this — define your tools and call `run()`.
+</Callout>
+
+Here's the same two-tool agent, with and without Stratus:
+
+<Tabs items={["Stratus", "Without SDK"]}>
+<Tab value="Stratus">
+
+```ts title="stratus.ts"
+import { AzureResponsesModel } from "stratus";
+import { Agent, run, tool } from "stratus/core";
+import { z } from "zod";
+
+const model = new AzureResponsesModel({
+  endpoint: process.env.AZURE_ENDPOINT!,
+  apiKey: process.env.AZURE_API_KEY!,
+  deployment: "gpt-5.2",
+});
+
+const getWeather = tool({
+  name: "get_weather",
+  description: "Get weather for a city",
+  parameters: z.object({ location: z.string() }),
+  execute: async (_ctx, { location }) => fetchWeather(location),
+});
+
+const getTime = tool({
+  name: "get_time",
+  description: "Get current time for a city",
+  parameters: z.object({ location: z.string() }),
+  execute: async (_ctx, { location }) => fetchTime(location),
+});
+
+const agent = new Agent({
+  name: "assistant",
+  model,
+  tools: [getWeather, getTime],
+});
+
+const result = await run(
+  agent,
+  "Weather and time in San Francisco, Tokyo, and Paris?"
+);
+console.log(result.output);
+```
+
+</Tab>
+<Tab value="Without SDK">
+
+```python title="manual.py"
+import json
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://YOUR-RESOURCE.openai.azure.com/openai/v1/",
+    api_key="YOUR_KEY",
+)
+
+# Step 1: Define tools as raw JSON
+tools = [
+    {"type": "function", "function": {
+        "name": "get_weather", "description": "Get weather",
+        "parameters": {"type": "object", "properties": {
+            "location": {"type": "string"}
+        }, "required": ["location"]}
+    }},
+    {"type": "function", "function": {
+        "name": "get_time", "description": "Get time",
+        "parameters": {"type": "object", "properties": {
+            "location": {"type": "string"}
+        }, "required": ["location"]}
+    }},
+]
+
+# Step 2: First API call
+messages = [{"role": "user", "content": "Weather and time in SF, Tokyo, Paris?"}]
+response = client.chat.completions.create(
+    model="gpt-5.2", messages=messages, tools=tools
+)
+
+# Step 3: Manually parse and append assistant message
+msg = response.choices[0].message
+messages.append(msg)
+
+# Step 4: Manually dispatch each tool call
+if msg.tool_calls:
+    for tc in msg.tool_calls:
+        args = json.loads(tc.function.arguments)
+        if tc.function.name == "get_weather":
+            result = fetch_weather(args.get("location"))
+        elif tc.function.name == "get_time":
+            result = fetch_time(args.get("location"))
+        else:
+            result = json.dumps({"error": "Unknown tool"})
+        messages.append({
+            "tool_call_id": tc.id, "role": "tool",
+            "name": tc.function.name, "content": result,
+        })
+
+# Step 5: Second API call for the final answer
+final = client.chat.completions.create(
+    model="gpt-5.2", messages=messages, tools=tools
+)
+print(final.choices[0].message.content)
+
+# Missing: streaming, multi-round loops, validation, retries,
+# error recovery, abort signals, parallel execution, type safety
+```
+
+</Tab>
+</Tabs>
+
+The Stratus version handles parallel tool calls, multi-round tool loops, Zod validation, error recovery, 429 retries, streaming, and abort signals. The manual approach handles none of these.
+
+## Next steps
+
+<Cards>
+  <Card title="Tools Reference" href="/docs/tools">
+    Full API reference for defining and configuring tools
+  </Card>
+  <Card title="Structured Output" href="/docs/structured-output">
+    Parse model responses into typed objects with Zod
+  </Card>
+  <Card title="Hooks" href="/docs/hooks">
+    Intercept tool calls with allow, deny, and modify decisions
+  </Card>
+  <Card title="Streaming" href="/docs/streaming">
+    Real-time events and abort signal propagation
+  </Card>
+</Cards>

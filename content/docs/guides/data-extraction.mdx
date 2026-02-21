@@ -3,42 +3,52 @@ title: "Guide: Data Extraction Pipeline"
 description: Extract structured data from unstructured text with validation and guardrails
 ---
 
-Build a data extraction pipeline that takes unstructured text (emails, documents, support tickets) and extracts structured data with type-safe schemas, output guardrails, and session-based batch processing.
+Turn unstructured text into typed, validated data. This guide walks you through building an extraction pipeline that parses support tickets, emails, and documents into Zod-validated objects with guardrails that catch bad output before it reaches your system.
 
-## What you'll build
+In this guide, you will:
 
-<Steps>
-<Step>
+- **Define a Zod schema** that describes the exact shape of your extracted data
+- **Create an extraction agent** that returns type-safe structured output
+- **Add output guardrails** that validate quality and block sensitive data leaks
+- **Process documents in batch** using `prompt()` for stateless extraction
+- **Enrich extractions with tools** that pull in external data during extraction
+- **Monitor performance with tracing** to track model calls, tool usage, and latency
 
-### Define a Zod schema
+## Quick start
 
-Specify exactly what data you want to extract.
+Extract structured data from text in under 20 lines:
 
-</Step>
-<Step>
+```ts title="quick-start.ts"
+import { Agent, run } from "stratus/core";
+import { AzureResponsesModel } from "stratus";
+import { z } from "zod";
 
-### Extract with structured output
+const model = new AzureResponsesModel({ deployment: "gpt-5.2" });
 
-The model returns JSON matching your schema.
+const ContactExtractor = z.object({
+  name: z.string().describe("Full name"),
+  email: z.string().email().optional(),
+  company: z.string().optional(),
+});
 
-</Step>
-<Step>
+const extractor = new Agent({
+  name: "contact_extractor",
+  model,
+  instructions: "Extract contact information from the provided text.",
+  outputType: ContactExtractor, // [!code highlight]
+});
 
-### Validate with output guardrails
+const result = await run(extractor, "Hi, I'm Jane Doe from Acme Corp. Reach me at jane@acme.com."); // [!code highlight]
 
-Guardrails check the extracted data for quality and compliance.
+console.log(result.finalOutput);
+// { name: "Jane Doe", email: "jane@acme.com", company: "Acme Corp" }
+```
 
-</Step>
-<Step>
-
-### Process in batch via sessions
-
-Use sessions to process multiple documents with context.
-
-</Step>
-</Steps>
+The `outputType` property tells the agent to return JSON matching your Zod schema instead of free-form text. The `finalOutput` field on the result is fully typed as `z.infer<typeof ContactExtractor>`.
 
 ## Step 1: Define your extraction schema
+
+Start by describing the shape of the data you want to extract. Use `.describe()` on each field to give the model clear extraction hints.
 
 ```ts title="schema.ts"
 import { z } from "zod";
@@ -61,7 +71,13 @@ const ExtractedTicket = z.object({
 });
 ```
 
+<Callout type="info">
+Zod `.describe()` strings are included in the JSON schema sent to the model. Treat them like mini-prompts: the more specific the description, the better the extraction.
+</Callout>
+
 ## Step 2: Create the extraction agent
+
+Wire the schema into an agent with `outputType`. The model returns JSON that Stratus parses and validates against your schema automatically.
 
 ```ts title="extractor.ts"
 import { Agent, run } from "stratus/core";
@@ -101,7 +117,7 @@ console.log(result.finalOutput);
 
 ## Step 3: Add output guardrails
 
-Validate extracted data before it enters your system:
+Guardrails validate extracted data before it enters your system. They run automatically after each extraction and throw if the output fails validation.
 
 ```ts title="guardrails.ts"
 import type { OutputGuardrail } from "stratus/core";
@@ -152,7 +168,7 @@ const piiRedactionGuard: OutputGuardrail = {
 };
 ```
 
-Add guardrails to the agent:
+Attach the guardrails to the agent with `outputGuardrails`:
 
 ```ts title="guarded-extractor.ts"
 const extractor = new Agent({
@@ -164,12 +180,16 @@ const extractor = new Agent({
 });
 ```
 
-## Step 4: Batch processing with sessions
+<Callout type="warn">
+Output guardrails run in parallel. If any guardrail trips, Stratus throws an `OutputGuardrailTripwireTriggered` error. Catch it to implement retry logic or fallback behavior.
+</Callout>
 
-Process multiple documents in sequence, with context accumulating:
+## Step 4: Batch processing with `prompt()`
+
+Use `prompt()` for stateless, one-shot extraction across multiple documents. Each call is independent, so there is no conversation history to manage.
 
 ```ts title="batch.ts"
-import { createSession, prompt } from "stratus/core";
+import { prompt } from "stratus/core";
 
 async function extractFromDocuments(documents: string[]) {
   const results: z.infer<typeof ExtractedTicket>[] = [];
@@ -196,9 +216,13 @@ async function extractFromDocuments(documents: string[]) {
 }
 ```
 
-## Step 5: Extraction with tools
+<Callout type="info">
+For high-throughput pipelines, run extractions concurrently with `Promise.all()` or a concurrency limiter like `p-limit`. Each `prompt()` call is stateless and safe to parallelize.
+</Callout>
 
-For complex extraction that needs external data, add tools:
+## Step 5: Enrich extractions with tools
+
+For extraction that needs external data, add tools. The model calls tools first to gather context, then produces the structured JSON output in its final response.
 
 ```ts title="enriched-extractor.ts"
 const lookupCompany = tool({
@@ -223,12 +247,12 @@ const enrichedExtractor = new Agent({
 ```
 
 <Callout type="info">
-When using tools with `outputType`, the model calls tools first, then produces the structured JSON output in its final response.
+When you combine tools with `outputType`, the agent's run loop calls tools until it has enough context, then produces a single structured JSON response. Tool results become part of the conversation history the model uses to generate the final output.
 </Callout>
 
 ## Step 6: Monitor with tracing
 
-Track extraction performance across your pipeline:
+Wrap extraction calls in `withTrace()` to track performance across your pipeline. Each model call, tool execution, and guardrail check is captured as a span.
 
 ```ts title="monitored.ts"
 import { withTrace } from "stratus/core";
@@ -244,6 +268,8 @@ console.log(`Priority: ${result.finalOutput.priority}`);
 ```
 
 ## Error handling
+
+Extraction can fail in two ways: the model output does not match your schema, or a guardrail rejects the output. Handle both to build a resilient pipeline.
 
 <Tabs items={["Output Parse Error", "Guardrail Triggered", "Both"]}>
 <Tab value="Output Parse Error">
