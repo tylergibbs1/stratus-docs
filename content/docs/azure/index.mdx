@@ -8,7 +8,8 @@ Stratus includes a built-in Azure OpenAI Chat Completions implementation with st
 ## Configuration
 
 ```ts title="model.ts"
-import { AzureChatCompletionsModel } from "stratus";
+import { AzureChatCompletionsModel } from "stratus/azure";
+// or: import { AzureChatCompletionsModel } from "stratus";
 
 const model = new AzureChatCompletionsModel({
   endpoint: "https://your-resource.openai.azure.com",

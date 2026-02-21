@@ -1,0 +1,313 @@
+---
+title: "Guide: Data Extraction Pipeline"
+description: Extract structured data from unstructured text with validation and guardrails
+---
+
+Build a data extraction pipeline that takes unstructured text (emails, documents, support tickets) and extracts structured data with type-safe schemas, output guardrails, and session-based batch processing.
+
+## What you'll build
+
+<Steps>
+<Step>
+
+### Define a Zod schema
+
+Specify exactly what data you want to extract.
+
+</Step>
+<Step>
+
+### Extract with structured output
+
+The model returns JSON matching your schema.
+
+</Step>
+<Step>
+
+### Validate with output guardrails
+
+Guardrails check the extracted data for quality and compliance.
+
+</Step>
+<Step>
+
+### Process in batch via sessions
+
+Use sessions to process multiple documents with context.
+
+</Step>
+</Steps>
+
+## Step 1: Define your extraction schema
+
+```ts title="schema.ts"
+import { z } from "zod";
+
+const ContactInfo = z.object({
+  name: z.string().describe("Full name of the person"),
+  email: z.string().email().optional().describe("Email address if present"),
+  phone: z.string().optional().describe("Phone number if present"),
+  company: z.string().optional().describe("Company or organization name"),
+  role: z.string().optional().describe("Job title or role"),
+});
+
+const ExtractedTicket = z.object({
+  subject: z.string().describe("Brief summary of the issue"),
+  priority: z.enum(["low", "medium", "high", "critical"]),
+  category: z.enum(["billing", "technical", "account", "feature_request", "other"]),
+  contact: ContactInfo,
+  sentiment: z.enum(["positive", "neutral", "negative", "frustrated"]),
+  actionItems: z.array(z.string()).describe("Concrete next steps to resolve"),
+});
+```
+
+## Step 2: Create the extraction agent
+
+```ts title="extractor.ts"
+import { Agent, run } from "stratus/core";
+
+const extractor = new Agent({
+  name: "ticket_extractor",
+  model,
+  instructions: `You are a data extraction specialist. Given a support ticket
+    or customer message, extract structured information accurately.
+    - Infer priority from urgency cues ("ASAP", "urgent", "when you get a chance")
+    - Detect sentiment from tone and word choice
+    - Generate actionable next steps`,
+  outputType: ExtractedTicket, // [!code highlight]
+});
+
+const result = await run(extractor, `
+  From: jane.doe@acme.com
+  Subject: Can't access my dashboard - URGENT
+
+  Hi, I'm Jane Doe, VP of Engineering at Acme Corp. Since this morning,
+  I keep getting a 403 error when trying to access the analytics dashboard.
+  My team of 50 engineers relies on this daily. Please fix ASAP.
+
+  Jane
+`);
+
+console.log(result.finalOutput);
+// {
+//   subject: "Dashboard access returning 403 error",
+//   priority: "critical",
+//   category: "technical",
+//   contact: { name: "Jane Doe", email: "jane.doe@acme.com", company: "Acme Corp", role: "VP of Engineering" },
+//   sentiment: "frustrated",
+//   actionItems: ["Investigate 403 error on analytics dashboard", "Check permissions for jane.doe@acme.com", "Notify engineering team of resolution"]
+// }
+```
+
+## Step 3: Add output guardrails
+
+Validate extracted data before it enters your system:
+
+```ts title="guardrails.ts"
+import type { OutputGuardrail } from "stratus/core";
+
+const extractionQualityGuard: OutputGuardrail = {
+  name: "extraction_quality",
+  execute: (output) => {
+    try {
+      const data = JSON.parse(output);
+
+      // Reject if no action items were generated
+      if (!data.actionItems || data.actionItems.length === 0) {
+        return {
+          tripwireTriggered: true,
+          outputInfo: { reason: "No action items extracted" },
+        };
+      }
+
+      // Reject if contact has no name
+      if (!data.contact?.name) {
+        return {
+          tripwireTriggered: true,
+          outputInfo: { reason: "Contact name is required" },
+        };
+      }
+
+      return { tripwireTriggered: false };
+    } catch {
+      return {
+        tripwireTriggered: true,
+        outputInfo: { reason: "Invalid JSON output" },
+      };
+    }
+  },
+};
+
+const piiRedactionGuard: OutputGuardrail = {
+  name: "pii_check",
+  execute: (output) => {
+    // Check for SSNs, credit card numbers, etc. that shouldn't be in extraction output
+    const hasSensitivePII = /\b\d{3}-\d{2}-\d{4}\b/.test(output) ||
+                            /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/.test(output);
+    return {
+      tripwireTriggered: hasSensitivePII,
+      outputInfo: { reason: "Sensitive PII detected in extraction output" },
+    };
+  },
+};
+```
+
+Add guardrails to the agent:
+
+```ts title="guarded-extractor.ts"
+const extractor = new Agent({
+  name: "ticket_extractor",
+  model,
+  instructions: `...same as above...`,
+  outputType: ExtractedTicket,
+  outputGuardrails: [extractionQualityGuard, piiRedactionGuard], // [!code highlight]
+});
+```
+
+## Step 4: Batch processing with sessions
+
+Process multiple documents in sequence, with context accumulating:
+
+```ts title="batch.ts"
+import { createSession, prompt } from "stratus/core";
+
+async function extractFromDocuments(documents: string[]) {
+  const results: z.infer<typeof ExtractedTicket>[] = [];
+
+  for (const doc of documents) {
+    try {
+      const result = await prompt(doc, {
+        model,
+        instructions: `Extract structured data from the following support ticket.`,
+        outputType: ExtractedTicket,
+        outputGuardrails: [extractionQualityGuard],
+      });
+      results.push(result.finalOutput);
+    } catch (error) {
+      if (error instanceof OutputGuardrailTripwireTriggered) {
+        console.warn(`Skipped document: ${error.outputInfo}`);
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  return results;
+}
+```
+
+## Step 5: Extraction with tools
+
+For complex extraction that needs external data, add tools:
+
+```ts title="enriched-extractor.ts"
+const lookupCompany = tool({
+  name: "lookup_company",
+  description: "Look up a company in the CRM to get account details",
+  parameters: z.object({ name: z.string() }),
+  execute: async (ctx, { name }) => {
+    const company = await ctx.crm.findCompany(name);
+    return company ? JSON.stringify(company) : "Company not found in CRM";
+  },
+});
+
+const enrichedExtractor = new Agent({
+  name: "enriched_extractor",
+  model,
+  instructions: `Extract ticket data. Use lookup_company to enrich
+    the contact information with CRM data when a company is mentioned.`,
+  tools: [lookupCompany], // [!code highlight]
+  outputType: ExtractedTicket,
+  outputGuardrails: [extractionQualityGuard],
+});
+```
+
+<Callout type="info">
+When using tools with `outputType`, the model calls tools first, then produces the structured JSON output in its final response.
+</Callout>
+
+## Step 6: Monitor with tracing
+
+Track extraction performance across your pipeline:
+
+```ts title="monitored.ts"
+import { withTrace } from "stratus/core";
+
+const { result, trace } = await withTrace("ticket_extraction", () =>
+  run(enrichedExtractor, ticketText)
+);
+
+console.log(`Extraction took ${trace.duration}ms`);
+console.log(`Model calls: ${trace.spans.filter(s => s.type === "model_call").length}`);
+console.log(`Tool calls: ${trace.spans.filter(s => s.type === "tool_execution").length}`);
+console.log(`Priority: ${result.finalOutput.priority}`);
+```
+
+## Error handling
+
+<Tabs items={["Output Parse Error", "Guardrail Triggered", "Both"]}>
+<Tab value="Output Parse Error">
+
+```ts
+import { OutputParseError } from "stratus/core";
+
+try {
+  const result = await run(extractor, input);
+} catch (error) {
+  if (error instanceof OutputParseError) {
+    console.error("Model output didn't match schema:", error.message);
+    // Retry with more explicit instructions, or fall back to unstructured extraction
+  }
+}
+```
+
+</Tab>
+<Tab value="Guardrail Triggered">
+
+```ts
+import { OutputGuardrailTripwireTriggered } from "stratus/core";
+
+try {
+  const result = await run(extractor, input);
+} catch (error) {
+  if (error instanceof OutputGuardrailTripwireTriggered) {
+    console.error(`Quality check failed: ${error.guardrailName}`);
+    console.error("Details:", error.outputInfo);
+  }
+}
+```
+
+</Tab>
+<Tab value="Both">
+
+```ts
+try {
+  const result = await run(extractor, input);
+  return result.finalOutput;
+} catch (error) {
+  if (error instanceof OutputParseError) {
+    return { error: "parse_failed", raw: error.message };
+  }
+  if (error instanceof OutputGuardrailTripwireTriggered) {
+    return { error: "quality_check_failed", guardrail: error.guardrailName };
+  }
+  throw error;
+}
+```
+
+</Tab>
+</Tabs>
+
+## Next steps
+
+<Cards>
+  <Card title="Structured Output" href="/docs/structured-output">
+    Full reference for Zod schema output
+  </Card>
+  <Card title="Guardrails" href="/docs/guardrails">
+    Input and output validation patterns
+  </Card>
+  <Card title="Sessions" href="/docs/sessions">
+    Multi-turn processing with save/resume
+  </Card>
+</Cards>

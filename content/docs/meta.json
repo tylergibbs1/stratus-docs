@@ -18,6 +18,8 @@
 		"tracing",
 		"errors",
 		"---Azure---",
-		"...azure"
+		"...azure",
+		"---Guides---",
+		"...guides"
 	]
 }

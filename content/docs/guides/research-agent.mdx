@@ -1,0 +1,246 @@
+---
+title: "Guide: Research Agent"
+description: Build an agent that delegates research tasks to specialized subagents
+---
+
+Build a research agent that breaks down complex questions and delegates to specialized subagents. Each subagent focuses on a specific domain, reports back, and the parent synthesizes the findings.
+
+## What you'll build
+
+A parent agent that delegates to:
+
+<Cards>
+  <Card title="Web Researcher">
+    Searches the web and extracts key facts
+  </Card>
+  <Card title="Data Analyst">
+    Performs calculations and data analysis
+  </Card>
+  <Card title="Summarizer">
+    Condenses findings into structured reports
+  </Card>
+</Cards>
+
+## Step 1: Define subagent tools
+
+Each subagent gets its own specialized tools:
+
+```ts title="tools.ts"
+import { tool } from "stratus/core";
+import { z } from "zod";
+
+const webSearch = tool({
+  name: "web_search",
+  description: "Search the web for information",
+  parameters: z.object({
+    query: z.string().describe("Search query"),
+  }),
+  execute: async (_ctx, { query }) => {
+    const results = await searchAPI(query);
+    return JSON.stringify(results.slice(0, 5));
+  },
+});
+
+const fetchPage = tool({
+  name: "fetch_page",
+  description: "Fetch and extract text from a web page",
+  parameters: z.object({
+    url: z.string().describe("URL to fetch"),
+  }),
+  execute: async (_ctx, { url }, options) => {
+    const res = await fetch(url, { signal: options?.signal }); // [!code highlight]
+    const text = await res.text();
+    return extractMainContent(text).slice(0, 3000);
+  },
+});
+
+const calculate = tool({
+  name: "calculate",
+  description: "Evaluate a math expression",
+  parameters: z.object({
+    expression: z.string(),
+  }),
+  execute: async (_ctx, { expression }) => {
+    return String(new Function(`return (${expression})`)());
+  },
+});
+```
+
+## Step 2: Create subagent definitions
+
+```ts title="subagents.ts"
+import { Agent, subagent } from "stratus/core";
+
+const webResearcher = new Agent({
+  name: "web_researcher",
+  model,
+  instructions: `You are a web research specialist. Search for information,
+    visit relevant pages, and extract key facts. Return factual findings
+    with source URLs.`,
+  tools: [webSearch, fetchPage],
+});
+
+const dataAnalyst = new Agent({
+  name: "data_analyst",
+  model,
+  instructions: `You are a data analyst. Perform calculations, analyze numbers,
+    and identify trends. Return precise numerical results.`,
+  tools: [calculate],
+});
+
+const summarizer = new Agent({
+  name: "summarizer",
+  model,
+  instructions: `You are a research summarizer. Take raw findings and synthesize
+    them into a clear, structured summary with key takeaways.`,
+});
+```
+
+## Step 3: Wire subagents to the parent
+
+```ts title="research-agent.ts"
+const researchSubagent = subagent({
+  agent: webResearcher,
+  inputSchema: z.object({
+    topic: z.string().describe("What to research"),
+  }),
+  mapInput: (params) => `Research the following topic thoroughly: ${params.topic}`,
+});
+
+const analysisSubagent = subagent({
+  agent: dataAnalyst,
+  inputSchema: z.object({
+    question: z.string().describe("The data question to answer"),
+    data: z.string().describe("Relevant data or numbers to analyze"),
+  }),
+  mapInput: (params) => `Analyze: ${params.question}\n\nData: ${params.data}`,
+});
+
+const summarySubagent = subagent({
+  agent: summarizer,
+  inputSchema: z.object({
+    findings: z.string().describe("Raw research findings to summarize"),
+  }),
+  mapInput: (params) => `Summarize these findings:\n\n${params.findings}`,
+});
+```
+
+## Step 4: Create the orchestrator
+
+```ts title="orchestrator.ts"
+import { Agent, run } from "stratus/core";
+
+const researchOrchestrator = new Agent({
+  name: "research_orchestrator",
+  model,
+  instructions: `You are a research orchestrator. When given a question:
+    1. Break it into sub-questions
+    2. Use run_web_researcher for factual lookups
+    3. Use run_data_analyst for numerical analysis
+    4. Use run_summarizer to compile findings
+    Be thorough but efficient.`,
+  subagents: [researchSubagent, analysisSubagent, summarySubagent], // [!code highlight]
+});
+
+const result = await run(
+  researchOrchestrator,
+  "What is the current state of renewable energy adoption globally? Include market size, growth rates, and top countries.",
+);
+
+console.log(result.output);
+```
+
+## Adding structured output
+
+Get results in a structured format for downstream processing:
+
+```ts title="structured.ts"
+const ReportSchema = z.object({
+  title: z.string(),
+  summary: z.string(),
+  keyFindings: z.array(z.object({
+    finding: z.string(),
+    source: z.string().optional(),
+    confidence: z.enum(["high", "medium", "low"]),
+  })),
+  dataPoints: z.array(z.object({
+    metric: z.string(),
+    value: z.string(),
+  })),
+});
+
+const researchOrchestrator = new Agent({
+  name: "research_orchestrator",
+  model,
+  instructions: `...same as above...`,
+  subagents: [researchSubagent, analysisSubagent, summarySubagent],
+  outputType: ReportSchema, // [!code highlight]
+});
+
+const result = await run(researchOrchestrator, "...");
+console.log(result.finalOutput.keyFindings); // Typed array
+```
+
+## Adding tracing
+
+Monitor how subagents are being used:
+
+```ts title="traced.ts"
+import { withTrace } from "stratus/core";
+
+const { result, trace } = await withTrace("research_task", () =>
+  run(researchOrchestrator, "Analyze the EV market in 2025")
+);
+
+// See which subagents were called
+const subagentSpans = trace.spans
+  .flatMap((s) => [s, ...s.children])
+  .filter((s) => s.type === "subagent");
+
+for (const span of subagentSpans) {
+  console.log(`${span.name}: ${span.duration}ms`);
+}
+// subagent:web_researcher: 4523ms
+// subagent:data_analyst: 1201ms
+// subagent:summarizer: 2105ms
+```
+
+## Cancellation with abort signal
+
+Cancel long-running research if the user navigates away:
+
+```ts title="cancellable.ts"
+const ac = new AbortController();
+
+// Cancel if user disconnects
+req.on("close", () => ac.abort());
+
+try {
+  const result = await run(researchOrchestrator, question, {
+    signal: ac.signal, // [!code highlight]
+  });
+  res.json(result.finalOutput);
+} catch (error) {
+  if (error instanceof RunAbortedError) {
+    console.log("Research cancelled by user");
+  }
+}
+```
+
+<Callout type="info">
+The abort signal propagates through to all subagent runs and their tool executions, so everything cancels cleanly.
+</Callout>
+
+## Next steps
+
+<Cards>
+  <Card title="Subagents" href="/docs/subagents">
+    Full subagent API reference
+  </Card>
+  <Card title="Structured Output" href="/docs/structured-output">
+    Parse model output into typed objects
+  </Card>
+  <Card title="Tracing" href="/docs/tracing">
+    Monitor agent execution with spans
+  </Card>
+</Cards>

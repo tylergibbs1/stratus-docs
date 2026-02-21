@@ -1,0 +1,242 @@
+---
+title: "Guide: Customer Support Agent"
+description: Build a multi-agent customer support system with triage, handoffs, and hooks
+---
+
+Build a customer support system where a triage agent routes users to specialized agents. This guide covers handoffs, tools, hooks for audit logging, and guardrails for input validation.
+
+## What you'll build
+
+<Cards>
+  <Card title="Triage Agent">
+    Routes incoming requests to the right specialist
+  </Card>
+  <Card title="Order Agent">
+    Looks up orders and provides status updates
+  </Card>
+  <Card title="Refund Agent">
+    Processes refund requests with approval controls
+  </Card>
+</Cards>
+
+## Architecture
+
+```
+User → Triage Agent → Order Agent (tools: lookupOrder, trackShipment)
+                    → Refund Agent (tools: processRefund, checkEligibility)
+```
+
+## Step 1: Define your tools
+
+<Steps>
+<Step>
+
+### Order lookup tool
+
+```ts title="tools.ts"
+import { tool } from "stratus/core";
+import { z } from "zod";
+
+const lookupOrder = tool({
+  name: "lookup_order",
+  description: "Look up an order by ID and return its details",
+  parameters: z.object({
+    orderId: z.string().describe("The order ID, e.g. ORD-12345"),
+  }),
+  execute: async (ctx: AppContext, { orderId }) => {
+    const order = await ctx.db.orders.findById(orderId);
+    if (!order) return `Order ${orderId} not found`;
+    return JSON.stringify({
+      id: order.id,
+      status: order.status,
+      items: order.items,
+      total: order.total,
+    });
+  },
+});
+```
+
+</Step>
+<Step>
+
+### Refund eligibility tool
+
+```ts title="tools.ts"
+const checkEligibility = tool({
+  name: "check_refund_eligibility",
+  description: "Check if an order is eligible for a refund",
+  parameters: z.object({
+    orderId: z.string(),
+  }),
+  execute: async (ctx: AppContext, { orderId }) => {
+    const order = await ctx.db.orders.findById(orderId);
+    if (!order) return "Order not found";
+    const daysSincePurchase = daysBetween(order.createdAt, new Date());
+    const eligible = daysSincePurchase <= 30 && order.status !== "refunded";
+    return JSON.stringify({ eligible, daysSincePurchase, reason: eligible ? null : "Past 30-day window or already refunded" });
+  },
+});
+```
+
+</Step>
+</Steps>
+
+## Step 2: Create specialist agents
+
+```ts title="agents.ts"
+import { Agent } from "stratus/core";
+
+const orderAgent = new Agent<AppContext>({
+  name: "order_specialist",
+  model,
+  instructions: `You are an order specialist. Help customers with order lookups,
+    status updates, and tracking. Be concise and professional.`,
+  tools: [lookupOrder, trackShipment],
+  handoffDescription: "Transfer here for order status, tracking, and delivery questions",
+});
+
+const refundAgent = new Agent<AppContext>({
+  name: "refund_specialist",
+  model,
+  instructions: `You are a refund specialist. Check eligibility before processing.
+    Always confirm the refund amount with the customer before proceeding.`,
+  tools: [checkEligibility, processRefund],
+  handoffDescription: "Transfer here for refund requests and return processing",
+});
+```
+
+## Step 3: Create the triage agent with hooks
+
+```ts title="triage.ts"
+import { Agent, run } from "stratus/core";
+import type { ToolCallDecision } from "stratus/core";
+
+const triageAgent = new Agent<AppContext>({
+  name: "triage",
+  model,
+  instructions: `You are a customer support triage agent. Greet the customer,
+    understand their issue, and transfer them to the right specialist.
+    - Order questions → order_specialist
+    - Refund requests → refund_specialist
+    If unclear, ask a clarifying question.`,
+  handoffs: [orderAgent, refundAgent],
+  hooks: {
+    beforeRun: async ({ input }) => {
+      console.log(`[SUPPORT] New ticket: ${input.slice(0, 100)}`);
+    },
+    beforeHandoff: async ({ fromAgent, toAgent, context }) => { // [!code highlight]
+      await context.db.auditLog.create({ // [!code highlight]
+        event: "handoff", // [!code highlight]
+        from: fromAgent.name, // [!code highlight]
+        to: toAgent.name, // [!code highlight]
+        timestamp: new Date(), // [!code highlight]
+      }); // [!code highlight]
+    },
+    afterRun: async ({ result, context }) => {
+      await context.db.auditLog.create({
+        event: "resolved",
+        output: result.output.slice(0, 200),
+        agent: result.lastAgent.name,
+      });
+    },
+  },
+});
+```
+
+## Step 4: Add input guardrails
+
+```ts title="guardrails.ts"
+import type { InputGuardrail } from "stratus/core";
+
+const toxicityGuard: InputGuardrail<AppContext> = {
+  name: "toxicity_check",
+  execute: (input) => ({
+    tripwireTriggered: containsToxicLanguage(input),
+    outputInfo: { reason: "Toxic language detected" },
+  }),
+};
+
+// Add to the triage agent
+const triageAgent = new Agent<AppContext>({
+  // ...same config as above
+  inputGuardrails: [toxicityGuard], // [!code highlight]
+});
+```
+
+## Step 5: Run as a session
+
+```ts title="main.ts"
+import { createSession } from "stratus/core";
+
+const session = createSession<AppContext>({
+  model,
+  instructions: triageAgent.instructions!,
+  handoffs: [orderAgent, refundAgent],
+  hooks: triageAgent.hooks,
+  inputGuardrails: [toxicityGuard],
+  context: {
+    db: database,
+    userId: "user_abc",
+  },
+});
+
+// Customer conversation
+session.send("Hi, I need to return order ORD-12345");
+for await (const event of session.stream()) {
+  if (event.type === "content_delta") process.stdout.write(event.content);
+}
+
+const result = await session.result;
+console.log(`\nHandled by: ${result.lastAgent.name}`);
+```
+
+## Adding permission control
+
+Use hook decisions to require approval for high-value refunds:
+
+```ts title="permission-hooks.ts"
+hooks: {
+  beforeToolCall: async ({ toolCall, context }) => {
+    if (toolCall.function.name === "process_refund") {
+      const params = JSON.parse(toolCall.function.arguments);
+      if (params.amount > 500) { // [!code highlight]
+        return { // [!code highlight]
+          decision: "deny", // [!code highlight]
+          reason: "Refunds over $500 require manager approval. Please escalate.", // [!code highlight]
+        }; // [!code highlight]
+      }
+    }
+  },
+}
+```
+
+## Save and resume conversations
+
+<Callout type="info">
+Use session save/resume to persist support conversations across server restarts or to hand off between shifts.
+</Callout>
+
+```ts title="persistence.ts"
+// Save at end of shift
+const snapshot = session.save();
+await redis.set(`support:${snapshot.id}`, JSON.stringify(snapshot));
+
+// Resume next shift
+const saved = JSON.parse(await redis.get(`support:${sessionId}`));
+const resumed = resumeSession(saved, { model, ...config });
+resumed.send("I'm a different agent, picking up where my colleague left off.");
+```
+
+## Next steps
+
+<Cards>
+  <Card title="Handoffs" href="/docs/handoffs">
+    Deep dive into multi-agent routing
+  </Card>
+  <Card title="Hooks" href="/docs/hooks">
+    Permission control with allow/deny/modify
+  </Card>
+  <Card title="Guardrails" href="/docs/guardrails">
+    Input and output validation
+  </Card>
+</Cards>
