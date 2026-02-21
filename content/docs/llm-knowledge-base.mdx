@@ -1,0 +1,874 @@
+---
+title: LLM Knowledge Base
+description: Complete Stratus SDK reference for AI agents
+---
+
+Complete reference for AI agents using the Stratus SDK. This page covers every type, function, pattern, and caveat in one place.
+
+## Installation
+
+```bash
+bun add stratus-sdk zod
+```
+
+Zod is a peer dependency. Both `stratus-sdk` and `stratus-sdk/core` are valid import paths.
+
+## Package Structure
+
+| Import | Contents |
+| --- | --- |
+| `stratus-sdk/core` | Provider-agnostic: Agent, Session, run loop, tools, handoffs, guardrails, hooks, tracing, errors |
+| `stratus-sdk/azure` | AzureResponsesModel, AzureChatCompletionsModel |
+| `stratus-sdk` | Re-exports both |
+
+## Models
+
+### AzureResponsesModel (Recommended)
+
+```ts
+import { AzureResponsesModel } from "stratus-sdk/azure";
+
+const model = new AzureResponsesModel({
+  endpoint: "https://your-resource.openai.azure.com",
+  apiKey: "your-api-key",
+  deployment: "gpt-5.2",
+  apiVersion: "2025-04-01-preview", // optional, this is the default
+  store: false,                      // optional, default false. Set true for previous_response_id optimization
+});
+```
+
+Supports all features including built-in hosted tools (web search, code interpreter, MCP, image generation).
+
+### AzureChatCompletionsModel
+
+```ts
+import { AzureChatCompletionsModel } from "stratus-sdk/azure";
+
+const model = new AzureChatCompletionsModel({
+  endpoint: "https://your-resource.openai.azure.com",
+  apiKey: "your-api-key",
+  deployment: "gpt-5.2",
+  apiVersion: "2025-03-01-preview", // optional, this is the default
+});
+```
+
+Does NOT support built-in hosted tools. Will throw `StratusError` if hosted tools are provided.
+
+### Endpoint Formats
+
+Both models accept any Azure endpoint format:
+
+```ts
+// Azure OpenAI
+"https://your-resource.openai.azure.com"
+// Cognitive Services
+"https://your-resource.cognitiveservices.azure.com"
+// AI Foundry project
+"https://your-project.services.ai.azure.com/api/projects/my-project"
+// Full URL (used as-is, deployment and apiVersion ignored)
+"https://your-resource.openai.azure.com/openai/deployments/gpt-5.2/chat/completions?api-version=2025-03-01-preview"
+```
+
+### Custom Models
+
+Implement the `Model` interface to use any provider:
+
+```ts
+interface Model {
+  getResponse(request: ModelRequest, options?: ModelRequestOptions): Promise<ModelResponse>;
+  getStreamedResponse(request: ModelRequest, options?: ModelRequestOptions): AsyncIterable<StreamEvent>;
+}
+```
+
+## Agent
+
+The core abstraction. Encapsulates instructions, tools, model, and behavior.
+
+```ts
+import { Agent } from "stratus-sdk/core";
+
+const agent = new Agent({
+  name: "assistant",              // required
+  model,                          // required (or pass to run())
+  instructions: "You are a helpful assistant.", // string or (ctx) => string
+  tools: [],                      // AgentTool[] (FunctionTool | HostedTool)
+  subagents: [],                  // SubAgent[]
+  handoffs: [],                   // (Agent | Handoff)[]
+  modelSettings: {},              // ModelSettings
+  outputType: z.object({...}),    // Zod schema for structured output
+  inputGuardrails: [],            // InputGuardrail[]
+  outputGuardrails: [],           // OutputGuardrail[]
+  hooks: {},                      // AgentHooks
+  toolUseBehavior: "run_llm_again", // ToolUseBehavior
+});
+```
+
+### Agent Generic Types
+
+```ts
+class Agent<TContext = unknown, TOutput = undefined>
+```
+
+- `TContext` — type of the context object flowing through tools, hooks, guardrails
+- `TOutput` — Zod-parsed type from `outputType`. When set, `RunResult.finalOutput` is typed
+
+### Dynamic Instructions
+
+```ts
+const agent = new Agent<AppContext>({
+  name: "assistant",
+  model,
+  instructions: async (ctx) => `You are helping user ${ctx.userId}. Today is ${new Date().toDateString()}.`,
+});
+```
+
+### Clone
+
+Create a modified copy:
+
+```ts
+const creativeAgent = agent.clone({ modelSettings: { temperature: 1.2 } });
+```
+
+## Running Agents
+
+Three execution methods:
+
+### run() — Non-streaming
+
+```ts
+import { run } from "stratus-sdk/core";
+
+const result = await run(agent, "Hello", {
+  context: { userId: "123" },  // optional TContext
+  model,                       // optional override
+  maxTurns: 10,                // default 10
+  signal: AbortSignal.timeout(30000), // optional
+  costEstimator,               // optional
+  maxBudgetUsd: 0.50,          // optional, requires costEstimator
+});
+```
+
+Input can be `string` or `ChatMessage[]`.
+
+### stream() — Streaming
+
+```ts
+import { stream } from "stratus-sdk/core";
+
+const { stream: s, result: resultPromise } = stream(agent, "Hello", options);
+
+for await (const event of s) {
+  if (event.type === "content_delta") process.stdout.write(event.content);
+}
+
+const result = await resultPromise;
+```
+
+You MUST consume the stream before awaiting the result promise.
+
+### prompt() — One-shot convenience
+
+```ts
+import { prompt } from "stratus-sdk/core";
+
+const result = await prompt("Hello", {
+  model,
+  instructions: "You are a helpful assistant.",
+  tools: [getWeather],
+});
+```
+
+Creates a temporary session internally.
+
+## RunResult
+
+```ts
+interface RunResult<TOutput = undefined> {
+  output: string;                    // raw text output
+  finalOutput: TOutput | undefined;  // typed if outputType set, undefined otherwise
+  messages: ChatMessage[];           // full conversation history
+  usage: UsageInfo;                  // aggregated across all model calls
+  lastAgent: Agent;                  // final agent (may differ from entry after handoffs)
+  finishReason?: FinishReason;       // "stop" | "length" | "tool_calls" | "content_filter"
+  numTurns: number;                  // number of model calls made
+  totalCostUsd: number;             // 0 if no costEstimator
+  responseId?: string;              // last Responses API response ID
+}
+```
+
+## Stream Events
+
+```ts
+type StreamEvent =
+  | { type: "content_delta"; content: string }
+  | { type: "tool_call_start"; toolCall: { id: string; name: string } }
+  | { type: "tool_call_delta"; toolCallId: string; arguments: string }
+  | { type: "tool_call_done"; toolCallId: string }
+  | { type: "done"; response: ModelResponse };
+```
+
+## Function Tools
+
+Local tools that execute your TypeScript code.
+
+```ts
+import { tool } from "stratus-sdk/core";
+import { z } from "zod";
+
+const getWeather = tool({
+  name: "get_weather",
+  description: "Get the current weather for a city",
+  parameters: z.object({
+    city: z.string().describe("City name"),
+    unit: z.enum(["celsius", "fahrenheit"]).optional(),
+  }),
+  execute: async (ctx, { city, unit }, options) => {
+    const res = await fetch(`/api/weather?city=${city}`, { signal: options?.signal });
+    return await res.text();
+  },
+});
+```
+
+### Execute Signature
+
+```ts
+execute: (context: TContext, params: TParams, options?: ToolExecuteOptions) => Promise<string> | string
+```
+
+- `context` — the context from `run()` options
+- `params` — Zod-validated parameters
+- `options.signal` — AbortSignal from run options
+
+If `execute` throws, the error message is sent to the model as the tool result (letting it recover).
+
+## Built-in Hosted Tools
+
+Server-side tools that execute on Azure's infrastructure. Only supported by `AzureResponsesModel`.
+
+```ts
+import { webSearchTool, codeInterpreterTool, mcpTool, imageGenerationTool } from "stratus-sdk/core";
+```
+
+### webSearchTool
+
+```ts
+webSearchTool()                    // no config needed
+webSearchTool({
+  searchContextSize: "high",       // "low" | "medium" | "high"
+  userLocation: {
+    type: "approximate",
+    city: "Seattle",
+    state: "WA",
+    country: "US",
+  },
+})
+```
+
+### codeInterpreterTool
+
+```ts
+codeInterpreterTool()              // default: container { type: "auto" }
+codeInterpreterTool({ container: { type: "custom-id" } })
+```
+
+### mcpTool
+
+```ts
+mcpTool({
+  serverLabel: "my-tools",                    // required
+  serverUrl: "https://example.com/sse",       // required
+  requireApproval: "never",                   // "always" | "never" | { always: [...], never: [...] }
+  headers: { Authorization: "Bearer token" }, // optional
+})
+```
+
+### imageGenerationTool
+
+```ts
+imageGenerationTool()  // no config
+```
+
+### Mixing Tool Types
+
+```ts
+const agent = new Agent({
+  name: "assistant",
+  model,
+  tools: [
+    webSearchTool(),           // hosted — server-side
+    codeInterpreterTool(),     // hosted — server-side
+    getWeather,                // function — local execution
+  ],
+});
+```
+
+Hosted tools don't fire `beforeToolCall`/`afterToolCall` hooks or appear in tracing spans. Function tools support all hook and tracing features.
+
+### Type System
+
+```ts
+type AgentTool = FunctionTool | HostedTool;
+
+interface HostedTool {
+  type: "hosted";
+  name: string;
+  definition: HostedToolDefinition;
+}
+
+// Type guards
+isHostedTool(tool)   // tool is HostedTool
+isFunctionTool(tool) // tool is FunctionTool
+```
+
+## Sessions
+
+Multi-turn conversations with persistent message history.
+
+```ts
+import { createSession } from "stratus-sdk/core";
+
+const session = createSession({
+  model,
+  instructions: "You are a helpful assistant.",
+  tools: [getWeather],
+  context: { userId: "123" },
+  maxTurns: 10,
+});
+
+session.send("What's the weather in NYC?");
+for await (const event of session.stream()) {
+  if (event.type === "content_delta") process.stdout.write(event.content);
+}
+const result = await session.result;
+
+// Multi-turn: history persists
+session.send("What about London?");
+for await (const event of session.stream()) {
+  if (event.type === "content_delta") process.stdout.write(event.content);
+}
+```
+
+### Save / Resume / Fork
+
+```ts
+const snapshot = session.save();  // SessionSnapshot { id, messages }
+
+// Resume (same session ID, continues conversation)
+const resumed = resumeSession(snapshot, config);
+
+// Fork (new session ID, copies history)
+const forked = forkSession(snapshot, config);
+```
+
+### Cleanup
+
+```ts
+// Automatic with Symbol.asyncDispose
+await using session = createSession(config);
+
+// Or manual
+session.close();
+```
+
+### Session per-invocation AbortSignal
+
+```ts
+session.stream({ signal: AbortSignal.timeout(5000) })
+```
+
+## Subagents
+
+Child agents that execute as tool calls and return results to the parent.
+
+```ts
+import { subagent } from "stratus-sdk/core";
+import { z } from "zod";
+
+const mathAgent = subagent({
+  agent: new Agent({ name: "math", model, instructions: "You are a math expert." }),
+  inputSchema: z.object({ problem: z.string() }),
+  mapInput: ({ problem }) => `Solve: ${problem}`,
+  toolName: "run_math",             // default: run_{agent.name}
+  toolDescription: "Solve math",
+  maxTurns: 5,                       // optional override
+});
+
+const parent = new Agent({
+  name: "assistant",
+  model,
+  subagents: [mathAgent],
+});
+```
+
+Subagent errors are caught and returned as tool messages. The parent agent continues.
+
+### vs Handoffs
+
+- **Subagents**: Delegate and return (child runs, result comes back)
+- **Handoffs**: Transfer control permanently (current agent replaced)
+
+## Handoffs
+
+Transfer control from one agent to another permanently within a run.
+
+```ts
+import { handoff } from "stratus-sdk/core";
+
+// Simple: auto-generates transfer_to_{name} tool
+const agent = new Agent({
+  name: "triage",
+  model,
+  handoffs: [billingAgent, techAgent],
+});
+
+// Custom config
+const customHandoff = handoff({
+  agent: billingAgent,
+  toolName: "route_to_billing",
+  toolDescription: "Transfer to billing specialist",
+  onHandoff: async (ctx) => { console.log("Handing off to billing"); },
+});
+```
+
+After handoff: the system prompt swaps to the new agent's instructions, and the loop continues with the new agent's tools.
+
+## Structured Output
+
+Force the model to return JSON matching a Zod schema.
+
+```ts
+const agent = new Agent({
+  name: "extractor",
+  model,
+  outputType: z.object({
+    name: z.string(),
+    age: z.number(),
+    email: z.string().optional(),
+  }),
+});
+
+const result = await run(agent, "Extract: John is 30, john@example.com");
+result.finalOutput; // { name: "John", age: 30, email: "john@example.com" }
+```
+
+Throws `OutputParseError` if the model output doesn't match the schema.
+
+Supported Zod types: objects, strings, numbers, booleans, arrays, enums, optional, nullable, default, union, describe(). All objects get `additionalProperties: false` for Azure strict mode.
+
+## Multimodal Input
+
+Send images alongside text.
+
+```ts
+import type { ContentPart } from "stratus-sdk/core";
+
+const parts: ContentPart[] = [
+  { type: "text", text: "What's in this image?" },
+  { type: "image_url", image_url: { url: "https://example.com/photo.jpg", detail: "high" } },
+];
+
+// With run()
+await run(agent, [{ role: "user", content: parts }]);
+
+// With sessions
+session.send(parts);
+```
+
+Image detail levels: `"auto"` (default), `"low"` (fast, fewer tokens), `"high"` (detailed).
+
+## ModelSettings
+
+```ts
+interface ModelSettings {
+  temperature?: number;           // 0-2
+  topP?: number;                  // 0-1
+  maxTokens?: number;             // max response tokens
+  maxCompletionTokens?: number;   // includes reasoning tokens (for reasoning models)
+  stop?: string[];                // stop sequences
+  presencePenalty?: number;       // -2 to 2
+  frequencyPenalty?: number;      // -2 to 2
+  toolChoice?: ToolChoice;        // "auto" | "none" | "required" | { type: "function", function: { name } }
+  parallelToolCalls?: boolean;    // default true
+  seed?: number;                  // deterministic sampling
+  reasoningEffort?: ReasoningEffort; // "none" | "minimal" | "low" | "medium" | "high" | "xhigh"
+  promptCacheKey?: string;        // improves cache hit rates
+}
+```
+
+### toolChoice
+
+| Value | Behavior |
+| --- | --- |
+| `"auto"` | Model decides (default) |
+| `"required"` | Must call at least one tool |
+| `"none"` | Text only, no tool calls |
+| `{ type: "function", function: { name: "get_weather" } }` | Must call this specific tool |
+
+### toolUseBehavior
+
+Set on Agent, not ModelSettings. Controls what happens AFTER a tool executes.
+
+| Value | Behavior |
+| --- | --- |
+| `"run_llm_again"` | Send result back to model (default) |
+| `"stop_on_first_tool"` | Stop run, tool output becomes result |
+| `{ stopAtToolNames: ["final_answer"] }` | Stop only when specific tool called |
+
+## Guardrails
+
+Validate input and output with tripwire support.
+
+```ts
+const profanityGuard: InputGuardrail<AppContext> = {
+  name: "profanity_check",
+  execute: async (input, context) => {
+    const hasProfanity = await checkProfanity(input);
+    return { tripwireTriggered: hasProfanity, outputInfo: { flaggedWords: [...] } };
+  },
+};
+
+const agent = new Agent({
+  name: "assistant",
+  model,
+  inputGuardrails: [profanityGuard],
+  outputGuardrails: [toxicityGuard],
+});
+```
+
+- Input guardrails run on the **entry** agent before the first model call
+- Output guardrails run on the **current** agent (post-handoff) after the final response
+- Multiple guardrails run in **parallel** (`Promise.all`)
+- Throws `InputGuardrailTripwireTriggered` or `OutputGuardrailTripwireTriggered`
+
+## Hooks
+
+Lifecycle callbacks with permission control.
+
+```ts
+const agent = new Agent({
+  name: "assistant",
+  model,
+  hooks: {
+    beforeRun: async ({ agent, input, context }) => { /* log */ },
+    afterRun: async ({ agent, result, context }) => { /* log */ },
+
+    beforeToolCall: async ({ agent, toolCall, context }) => {
+      // Return void to allow, or:
+      return { decision: "deny", reason: "Not allowed" };
+      // return { decision: "modify", modifiedParams: { ... } };
+    },
+
+    afterToolCall: async ({ agent, toolCall, result, context }) => { /* log */ },
+
+    beforeHandoff: async ({ fromAgent, toAgent, context }) => {
+      return { decision: "deny", reason: "Handoff blocked" };
+    },
+
+    onStop: async ({ agent, context, reason }) => {
+      // reason: "max_turns" | "max_budget"
+    },
+
+    onSubagentStart: async ({ agent, subagent, context }) => {},
+    onSubagentStop: async ({ agent, subagent, result, context }) => {},
+
+    onSessionStart: async ({ context }) => {},
+    onSessionEnd: async ({ context }) => {},
+  },
+});
+```
+
+### Hook Matchers
+
+For `beforeToolCall` and `afterToolCall`, use matchers to target specific tools:
+
+```ts
+hooks: {
+  beforeToolCall: [
+    { match: "delete_file", hook: ({ toolCall, context }) => ({ decision: "deny" }) },
+    { match: /^write_/, hook: ({ toolCall, context }) => { /* log writes */ } },
+    { match: ["read_file", /^list_/], hook: ({ toolCall }) => { /* ... */ } },
+  ],
+  afterToolCall: [
+    { match: "search", hook: ({ result }) => { /* log search results */ } },
+  ],
+}
+```
+
+Matchers are checked in order. For `beforeToolCall`, first deny/modify short-circuits.
+
+### Hook Execution Rules
+
+- `beforeRun`/`afterRun` fire on the **entry** agent
+- `beforeToolCall`/`afterToolCall` fire on the **current** agent (post-handoff)
+- `beforeHandoff` fires on the **from** agent
+- Denied tools skip execution and `afterToolCall`
+- Hosted tools do NOT fire `beforeToolCall`/`afterToolCall`
+
+## Tracing
+
+Opt-in span-based tracing via AsyncLocalStorage. Zero overhead when inactive.
+
+```ts
+import { withTrace } from "stratus-sdk/core";
+
+const { result, trace } = await withTrace("my-trace", async () => {
+  return run(agent, "Hello");
+});
+
+// trace.spans contains model_call, tool_execution, handoff, guardrail, subagent spans
+for (const span of trace.spans) {
+  console.log(span.name, span.type, span.duration);
+}
+```
+
+### Custom Spans
+
+```ts
+import { getCurrentTrace } from "stratus-sdk/core";
+
+const trace = getCurrentTrace(); // undefined if not inside withTrace()
+if (trace) {
+  const span = trace.startSpan("my-operation", "custom", { key: "value" });
+  // ... do work ...
+  trace.endSpan(span, { resultKey: "resultValue" });
+}
+```
+
+Span types: `"model_call"`, `"tool_execution"`, `"handoff"`, `"guardrail"`, `"subagent"`, `"custom"`.
+
+## Usage & Cost Tracking
+
+```ts
+import { createCostEstimator } from "stratus-sdk/core";
+
+const costEstimator = createCostEstimator({
+  inputTokenCostPer1k: 0.005,
+  outputTokenCostPer1k: 0.015,
+  cachedInputTokenCostPer1k: 0.0025, // optional
+});
+
+const result = await run(agent, "Hello", {
+  costEstimator,
+  maxBudgetUsd: 0.50, // throws MaxBudgetExceededError if exceeded
+});
+
+result.usage.promptTokens;      // number
+result.usage.completionTokens;  // number
+result.usage.totalTokens;       // number
+result.usage.cacheReadTokens;   // number | undefined
+result.usage.reasoningTokens;   // number | undefined
+result.totalCostUsd;            // number
+result.numTurns;                // number of model calls
+```
+
+Usage is aggregated across all model calls in the run. `onStop` hook fires with `reason: "max_budget"` before the error is thrown.
+
+## Abort Signal
+
+```ts
+// Timeout
+const result = await run(agent, "Hello", { signal: AbortSignal.timeout(5000) });
+
+// Manual control
+const ac = new AbortController();
+setTimeout(() => ac.abort(), 5000);
+const result = await run(agent, "Hello", { signal: ac.signal });
+
+// Server pattern
+req.on("close", () => ac.abort());
+```
+
+Throws `RunAbortedError`. Signal is propagated to tool `execute` functions via `options.signal` and to model API calls.
+
+## Todo Tracking
+
+Structured task progress for agent execution.
+
+```ts
+import { TodoList, todoTool } from "stratus-sdk/core";
+
+const todos = new TodoList();
+todos.onUpdate((items) => renderProgress(items)); // fires on each update
+
+const agent = new Agent({
+  name: "builder",
+  model,
+  tools: [todoTool(todos)],
+});
+```
+
+Agent calls `todo_write` with the full list each time. Items have `status: "pending" | "in_progress" | "completed"` and optional `activeForm` (present continuous verb, e.g., "Installing dependencies").
+
+## Errors
+
+```
+StratusError (base)
+├── MaxTurnsExceededError        — maxTurns exceeded
+├── MaxBudgetExceededError       — maxBudgetUsd exceeded (.budgetUsd, .spentUsd)
+├── RunAbortedError              — AbortSignal triggered
+├── ModelError                   — API error (.status, .code)
+│   └── ContentFilterError       — Azure content filter
+├── OutputParseError             — structured output Zod parse failed
+├── InputGuardrailTripwireTriggered  — (.guardrailName, .outputInfo)
+└── OutputGuardrailTripwireTriggered — (.guardrailName, .outputInfo)
+```
+
+```ts
+import { StratusError, ModelError, ContentFilterError, MaxTurnsExceededError } from "stratus-sdk/core";
+
+try {
+  const result = await run(agent, input);
+} catch (error) {
+  if (error instanceof ContentFilterError) { /* filtered */ }
+  else if (error instanceof MaxTurnsExceededError) { /* too many turns */ }
+  else if (error instanceof ModelError) { /* API error: error.status */ }
+  else if (error instanceof StratusError) { /* catch-all SDK error */ }
+}
+```
+
+## Message Types
+
+```ts
+type ChatMessage = SystemMessage | DeveloperMessage | UserMessage | AssistantMessage | ToolMessage;
+
+interface SystemMessage { role: "system"; content: string }
+interface DeveloperMessage { role: "developer"; content: string }
+interface UserMessage { role: "user"; content: string | ContentPart[] }
+interface AssistantMessage { role: "assistant"; content: string | null; tool_calls?: ToolCall[] }
+interface ToolMessage { role: "tool"; tool_call_id: string; content: string }
+
+interface ToolCall {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+}
+```
+
+## Finish Reasons
+
+| Value | Meaning | Run Loop Action |
+| --- | --- | --- |
+| `"stop"` | Completed naturally | Return result |
+| `"tool_calls"` | Tools to execute | Execute tools, continue loop |
+| `"length"` | Hit maxTokens | Return partial result (NOT an error) |
+| `"content_filter"` | Azure filtered | Throw ContentFilterError |
+
+## Key Defaults
+
+| Setting | Default |
+| --- | --- |
+| `maxTurns` | 10 |
+| `toolChoice` | `"auto"` |
+| `toolUseBehavior` | `"run_llm_again"` |
+| `store` (AzureResponsesModel) | `false` |
+| Handoff tool name | `transfer_to_{agentName}` |
+| Subagent tool name | `run_{agentName}` |
+| `parallelToolCalls` | `true` |
+
+## Common Patterns
+
+### Triage Agent with Handoffs
+
+```ts
+const triage = new Agent({
+  name: "triage",
+  model,
+  instructions: "Route the user to the right specialist.",
+  handoffs: [billingAgent, techAgent, salesAgent],
+});
+```
+
+### Tool → Stop Pattern
+
+```ts
+const agent = new Agent({
+  name: "fetcher",
+  model,
+  tools: [fetchData],
+  toolUseBehavior: "stop_on_first_tool",
+});
+// result.output = return value of fetchData
+```
+
+### Research Agent with Subagents
+
+```ts
+const researcher = new Agent({
+  name: "researcher",
+  model,
+  subagents: [
+    subagent({ agent: searchAgent, inputSchema: z.object({ query: z.string() }), mapInput: ({ query }) => query }),
+    subagent({ agent: analyzerAgent, inputSchema: z.object({ data: z.string() }), mapInput: ({ data }) => data }),
+  ],
+});
+```
+
+### Web Search Agent
+
+```ts
+const agent = new Agent({
+  name: "searcher",
+  model, // must be AzureResponsesModel
+  tools: [webSearchTool()],
+});
+```
+
+### Budget-Limited Run
+
+```ts
+const result = await run(agent, "Analyze this dataset", {
+  costEstimator: createCostEstimator({ inputTokenCostPer1k: 0.005, outputTokenCostPer1k: 0.015 }),
+  maxBudgetUsd: 1.00,
+  maxTurns: 20,
+});
+```
+
+## Complete Export List
+
+From `stratus-sdk/core`:
+
+```ts
+// Classes
+Agent, RunResult, RunContext, Session, TodoList, TraceContext
+
+// Functions
+run, stream, prompt, createSession, resumeSession, forkSession
+tool, toolToDefinition
+subagent, subagentToDefinition, subagentToTool
+handoff, handoffToDefinition
+todoTool
+runInputGuardrails, runOutputGuardrails
+withTrace, getCurrentTrace
+createCostEstimator
+zodToJsonSchema
+isHostedTool, isFunctionTool
+webSearchTool, codeInterpreterTool, mcpTool, imageGenerationTool
+
+// Errors
+StratusError, MaxTurnsExceededError, MaxBudgetExceededError, ModelError,
+ContentFilterError, OutputParseError, RunAbortedError,
+InputGuardrailTripwireTriggered, OutputGuardrailTripwireTriggered
+
+// Types (exported as type-only)
+AgentConfig, HandoffInput, Instructions, AgentTool, HostedTool,
+FunctionTool, ToolExecuteOptions, SubAgent, SubAgentConfig,
+Handoff, HandoffConfig, GuardrailResult, InputGuardrail, OutputGuardrail,
+AgentHooks, ToolCallDecision, HandoffDecision, ToolMatcher,
+MatchedToolCallHook, MatchedAfterToolCallHook, BeforeToolCallHook, AfterToolCallHook,
+Span, Trace, CostEstimator, PricingConfig,
+RunOptions, StreamOptions, StreamedRunResult, RunResultOptions, SessionConfig, SessionSnapshot,
+Model, ModelRequest, ModelRequestOptions, ModelResponse, StreamEvent, UsageInfo, FinishReason,
+ChatMessage, SystemMessage, DeveloperMessage, UserMessage, AssistantMessage, ToolMessage,
+ToolCall, ToolDefinition, HostedToolDefinition, ModelSettings, ReasoningEffort,
+ResponseFormat, ToolChoice, ToolUseBehavior, ContentPart, TextContentPart, ImageContentPart,
+WebSearchToolConfig, CodeInterpreterToolConfig, McpToolConfig,
+Todo, TodoStatus, TodoUpdateListener
+```
+
+From `stratus-sdk/azure`:
+
+```ts
+AzureResponsesModel, AzureChatCompletionsModel
+// Types: AzureResponsesModelConfig, AzureChatCompletionsModelConfig
+```

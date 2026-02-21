@@ -30,6 +30,8 @@
 		"...azure",
 		"---Extensibility---",
 		"custom-models",
-		"guides"
+		"guides",
+		"---Reference---",
+		"llm-knowledge-base"
 	]
 }
