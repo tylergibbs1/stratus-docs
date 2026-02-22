@@ -17,7 +17,7 @@ A single `run()` may call the model several times, execute tools between calls, 
 | **Network** | Outbound HTTPS to your Azure OpenAI endpoint |
 | **Memory** | 256 MB minimum. 512 MB+ recommended for agents with large tool outputs or long conversation histories |
 | **CPU** | 1 vCPU minimum. Most time is spent waiting on Azure API calls, so CPU is rarely the bottleneck |
-| **Environment variables** | `AZURE_ENDPOINT`, `AZURE_API_KEY`, and your deployment name |
+| **Environment variables** | `AZURE_ENDPOINT`, `AZURE_API_KEY` (or Entra ID credentials), and your deployment name |
 
 <Callout type="info">
 Stratus spends most of its time waiting on network I/O (model API calls, tool HTTP requests). A single process can handle many concurrent agent runs without high CPU usage.
@@ -366,7 +366,7 @@ docker run -p 3000:3000 \
 ```
 
 <Callout type="warn">
-Never bake API keys into the image. Pass them as environment variables at runtime, or use a secrets manager.
+Never bake API keys into the image. Pass them as environment variables at runtime, use a secrets manager, or use [Entra ID with managed identity](/azure#microsoft-entra-id) to avoid secrets entirely.
 </Callout>
 
 For Node.js, swap the base image and entrypoint:

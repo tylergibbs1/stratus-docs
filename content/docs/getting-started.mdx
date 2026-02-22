@@ -20,10 +20,13 @@ npm install stratus zod
 You need an Azure OpenAI resource with a deployed model. You'll need:
 
 - **Endpoint** - Your Azure OpenAI endpoint URL
-- **API Key** - An API key for authentication
+- **API Key** or **Entra ID credentials** - See [Authentication](/azure#authentication) for both options
 - **Deployment** - The name of your deployed model (e.g. `gpt-5.2`)
 
 ## Create a Model
+
+<Tabs items={["API Key", "Entra ID"]}>
+<Tab value="API Key">
 
 ```ts title="model.ts"
 import { AzureResponsesModel } from "stratus-sdk";
@@ -34,6 +37,28 @@ const model = new AzureResponsesModel({
   deployment: "gpt-5.2",
 });
 ```
+
+</Tab>
+<Tab value="Entra ID">
+
+```ts title="model.ts"
+import { AzureResponsesModel } from "stratus-sdk";
+import { DefaultAzureCredential, getBearerTokenProvider } from "@azure/identity";
+
+const tokenProvider = getBearerTokenProvider(
+  new DefaultAzureCredential(),
+  "https://cognitiveservices.azure.com/.default",
+);
+
+const model = new AzureResponsesModel({
+  endpoint: process.env.AZURE_ENDPOINT!,
+  azureAdTokenProvider: tokenProvider,
+  deployment: "gpt-5.2",
+});
+```
+
+</Tab>
+</Tabs>
 
 ## Your First Agent
 

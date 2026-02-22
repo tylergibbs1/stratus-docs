@@ -1,11 +1,14 @@
 ---
 title: Introduction
-description: A TypeScript agent SDK for Azure OpenAI
+description: A better TypeScript agent SDK for Azure OpenAI
 ---
 
-Stratus is a TypeScript SDK for building AI agents on Azure OpenAI.
+Stratus is a better TypeScript agent SDK for Azure OpenAI.
 
 You get agents, tools, multi-turn sessions, streaming, handoffs, guardrails, and tracing. One `run()` call handles the entire tool loop. The types are strict. The API is small.
+
+- **One framework, two swappable backends** — `AzureChatCompletionsModel` and `AzureResponsesModel` implement the same [`Model`](/azure) interface. Switch with one line, zero agent code changes.
+- **No more 404 config spiral** — explicit `deployment` param, auto-endpoint detection for standard/foundry/full URLs, built-in retry with exponential backoff, and a unified [`ContentFilterError`](/errors) so Azure's inconsistent error shapes don't break your agent loop.
 
 ## Why this exists
 

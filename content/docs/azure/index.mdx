@@ -30,7 +30,8 @@ const model = new AzureResponsesModel({
 | Property | Type | Description |
 | --- | --- | --- |
 | `endpoint` | `string` | **Required.** Any [supported endpoint format](#endpoint-formats) |
-| `apiKey` | `string` | **Required.** API key for authentication |
+| `apiKey` | `string` | API key for authentication. **Required** unless `azureAdTokenProvider` is set. |
+| `azureAdTokenProvider` | `() => Promise<string>` | Entra ID token provider function. **Required** unless `apiKey` is set. See [Authentication](#authentication). |
 | `deployment` | `string` | **Required.** Sent as `model` in request body |
 | `apiVersion` | `string` | API version (default: `"2025-04-01-preview"`) |
 | `store` | `boolean` | Whether to persist responses server-side (default: `false`). Enable for `previous_response_id` optimization. |
@@ -55,7 +56,8 @@ const model = new AzureChatCompletionsModel({
 | Property | Type | Description |
 | --- | --- | --- |
 | `endpoint` | `string` | **Required.** Any [supported endpoint format](#endpoint-formats) |
-| `apiKey` | `string` | **Required.** API key for authentication |
+| `apiKey` | `string` | API key for authentication. **Required** unless `azureAdTokenProvider` is set. |
+| `azureAdTokenProvider` | `() => Promise<string>` | Entra ID token provider function. **Required** unless `apiKey` is set. See [Authentication](#authentication). |
 | `deployment` | `string` | **Required.** Model deployment name |
 | `apiVersion` | `string` | API version (default: `"2025-03-01-preview"`) |
 
@@ -209,7 +211,58 @@ Both `AzureChatCompletionsModel` and `AzureResponsesModel` parse cached token co
 
 ## Authentication
 
-Both implementations use `api-key` header authentication. The API key is sent as a header with every request.
+Both models support two authentication methods. Exactly one of `apiKey` or `azureAdTokenProvider` must be provided — the constructor throws if neither or both are set.
+
+### API Key
+
+The simplest option. The key is sent as an `api-key` header with every request.
+
+```ts title="api-key-auth.ts"
+const model = new AzureResponsesModel({
+  endpoint: "https://your-resource.openai.azure.com",
+  apiKey: process.env.AZURE_API_KEY!,
+  deployment: "gpt-5.2",
+});
+```
+
+### Microsoft Entra ID
+
+For enterprise environments, pass a token provider function instead of an API key. Stratus calls it before each request and sends the token as a `Bearer` header. This works with managed identities, service principals, and any `@azure/identity` credential.
+
+Install `@azure/identity` in your project (Stratus has no hard dependency on it):
+
+```bash tab="bun"
+bun add @azure/identity
+```
+
+```bash tab="npm"
+npm install @azure/identity
+```
+
+Then pass a token provider:
+
+```ts title="entra-id-auth.ts"
+import { AzureResponsesModel } from "stratus-sdk/azure";
+import { DefaultAzureCredential, getBearerTokenProvider } from "@azure/identity";
+
+const credential = new DefaultAzureCredential();
+const tokenProvider = getBearerTokenProvider(
+  credential,
+  "https://cognitiveservices.azure.com/.default",
+);
+
+const model = new AzureResponsesModel({
+  endpoint: "https://your-resource.openai.azure.com",
+  azureAdTokenProvider: tokenProvider, // [!code highlight]
+  deployment: "gpt-5.2",
+});
+```
+
+The token provider is called fresh on each API request — token caching and refresh are handled by `@azure/identity`.
+
+<Callout type="info">
+`DefaultAzureCredential` automatically picks the right credential for your environment: managed identity in Azure, Azure CLI locally, and environment variables in CI. See the [`@azure/identity` docs](https://learn.microsoft.com/en-us/javascript/api/@azure/identity/defaultazurecredential) for the full chain.
+</Callout>
 
 ## Streaming
 
