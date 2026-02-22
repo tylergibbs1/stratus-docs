@@ -3,10 +3,14 @@ title: Tools
 description: Give agents the ability to call functions
 ---
 
-Tools let agents call your TypeScript functions. Each tool has a name, description, Zod parameter schema, and an execute function.
+Tools let agents call your TypeScript functions. Each tool has a name, description, Zod parameter schema, and an execute function. Stratus requires [Zod 4](https://zod.dev) (`zod@^4.0.0`).
 
 <Callout type="info">
-Stratus handles the full tool loop automatically - Zod validation, parallel execution, error recovery, and 429 retries. No `JSON.parse()`, no dispatch tables, no manual message management. See the [Agentic Tool Use guide](/guides/agentic-tool-use) for the full picture.
+Stratus uses Zod 4's built-in `toJSONSchema()` to convert tool parameter schemas to JSON Schema for the Azure API. This means all Zod types are supported — including recursive objects, template literals, discriminated unions, and everything else Zod 4 can represent.
+</Callout>
+
+<Callout type="info">
+Stratus handles the full tool loop automatically - parallel execution, error recovery, and 429 retries. No `JSON.parse()`, no dispatch tables, no manual message management. See the [Agentic Tool Use guide](/guides/agentic-tool-use) for the full picture.
 </Callout>
 
 <Callout>
