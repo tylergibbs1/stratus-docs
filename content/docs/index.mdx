@@ -7,8 +7,12 @@ Stratus is a better TypeScript agent SDK for Azure OpenAI.
 
 You get agents, tools, multi-turn sessions, streaming, handoffs, guardrails, and tracing. One `run()` call handles the entire tool loop. The types are strict. The API is small.
 
-- **One framework, two swappable backends** — `AzureChatCompletionsModel` and `AzureResponsesModel` implement the same [`Model`](/azure) interface. Switch with one line, zero agent code changes.
-- **No more 404 config spiral** — explicit `deployment` param, auto-endpoint detection for standard/foundry/full URLs, built-in retry with exponential backoff, and a unified [`ContentFilterError`](/errors) so Azure's inconsistent error shapes don't break your agent loop.
+- **One framework, two swappable backends** — [Chat Completions and Responses API](/azure) through the same interface. Switch with one line.
+- **No more 404 config spiral** — auto-endpoint detection for standard, foundry, and full URLs. Built-in retry with exponential backoff and unified [content filter errors](/errors).
+- **One call, entire tool loop** — model calls, parallel tool execution, result appending, and looping back. No manual message array management.
+- **Client-side agent state** — no server-side threads or opaque IDs. [Save, resume, and fork](/sessions) conversations with portable snapshots.
+- **Budget enforcement built in** — set a [dollar limit](/usage-tracking) and the run stops before you get a surprise bill. Cost estimation accounts for cached and reasoning tokens.
+- **Auth validated at construction** — API key or Entra ID, enforced mutually exclusive. No silent misconfiguration that surfaces as a mysterious 401 three calls later.
 
 ## Why this exists
 
