@@ -20,6 +20,14 @@ The OpenAI SDK gives you `chat.completions.create()`. Everything else is on you:
 - **Multi-agent orchestration doesn't exist.** [Handoffs](/handoffs), [subagents](/subagents), [guardrails](/guardrails), and [hooks](/hooks) are first-class in Stratus.
 - **Both APIs, one interface.** [Chat Completions and Responses API](/azure) through the same `Model` interface. Swap with one line.
 
+And these are things other agent SDKs don't do at all:
+
+- **Budget enforcement.** Set [`maxBudgetUsd`](/usage-tracking) and the run stops before you get a surprise bill. Not after.
+- **Hook modify.** [Intercept tool calls](/hooks), rewrite their arguments, or deny them entirely. Per-tool pattern matching included.
+- **Todo tracking.** Agents report structured progress in real-time via [`TodoList`](/todo-tracking). Your UI updates as they work, not after.
+- **Session fork.** [Branch a conversation](/sessions) with one call. Try a different strategy without losing the original.
+- **Typed context end-to-end.** One [context type](/agents#context) flows through tools, hooks, guardrails, and subagents. TypeScript generics, not `any`.
+
 ## Features
 
 <Cards>
