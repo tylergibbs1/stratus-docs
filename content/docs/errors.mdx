@@ -12,6 +12,7 @@ StratusError
 ├── MaxTurnsExceededError
 ├── MaxBudgetExceededError
 ├── RunAbortedError
+├── ToolTimeoutError
 ├── ModelError
 │   └── ContentFilterError
 ├── OutputParseError
@@ -100,6 +101,32 @@ try {
 
 <Callout type="info">
 Pre-aborted signals throw `RunAbortedError` immediately without making any API calls.
+</Callout>
+
+## ToolTimeoutError
+
+Thrown when a tool exceeds its configured `timeout`. The run loop catches this internally and sends the error message back to the model as a tool result, so it does not propagate out of `run()`.
+
+```ts
+import { ToolTimeoutError } from "stratus-sdk/core";
+
+const slowTool = tool({
+  name: "slow_search",
+  description: "A slow search tool",
+  parameters: z.object({ query: z.string() }),
+  timeout: 5000, // [!code highlight]
+  execute: async (_ctx, { query }) => {
+    return await slowExternalApi(query);
+  },
+});
+```
+
+Properties:
+- `toolName: string` - The name of the tool that timed out
+- `timeoutMs: number` - The timeout value in milliseconds
+
+<Callout type="info">
+To customize the error message sent to the model, use a `toolErrorFormatter` in your [run options](/running-agents#options).
 </Callout>
 
 ## ModelError

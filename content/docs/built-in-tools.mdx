@@ -132,6 +132,77 @@ const result = await run(agent, "Create an image of a sunset over mountains");
 
 No configuration options. The API handles image generation server-side.
 
+## File Search
+
+Search over uploaded files in vector stores.
+
+```ts title="file-search.ts"
+import { Agent, run, fileSearchTool } from "stratus-sdk/core";
+
+const agent = new Agent({
+  name: "research-assistant",
+  model,
+  tools: [
+    fileSearchTool({
+      vectorStoreIds: ["vs_abc123"],
+    }),
+  ],
+});
+
+const result = await run(agent, "Find information about quarterly revenue");
+```
+
+### Configuration
+
+```ts title="file-search-config.ts"
+fileSearchTool({
+  vectorStoreIds: ["vs_abc123", "vs_def456"], // required
+  maxNumResults: 10,                           // optional
+});
+```
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `vectorStoreIds` | `string[]` | **Required.** IDs of the vector stores to search. |
+| `maxNumResults` | `number` | Maximum number of results to return. |
+
+## Computer Use
+
+Let the model control a virtual computer display (mouse, keyboard, screenshots).
+
+```ts title="computer-use.ts"
+import { Agent, run, computerUseTool } from "stratus-sdk/core";
+
+const agent = new Agent({
+  name: "browser-agent",
+  model,
+  tools: [
+    computerUseTool({
+      displayWidth: 1024,
+      displayHeight: 768,
+    }),
+  ],
+});
+
+const result = await run(agent, "Take a screenshot of the homepage");
+```
+
+### Configuration
+
+```ts title="computer-use-config.ts"
+computerUseTool({
+  displayWidth: 1024,      // required
+  displayHeight: 768,      // required
+  environment: "linux",    // optional: "windows" | "mac" | "linux" (default: "linux")
+});
+```
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `displayWidth` | `number` | **Required.** Width of the virtual display in pixels. |
+| `displayHeight` | `number` | **Required.** Height of the virtual display in pixels. |
+| `environment` | `string` | OS environment. Defaults to `"linux"`. |
+
 ## Mixing Tool Types
 
 Built-in tools and function tools work together. The agent sees all tools and picks the right ones.

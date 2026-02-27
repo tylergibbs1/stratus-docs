@@ -106,6 +106,85 @@ const tenantGuardrail: InputGuardrail<AppContext> = {
 };
 ```
 
+## Tool Guardrails
+
+Tool guardrails run before and after individual tool executions. Use them to validate tool arguments or inspect tool results.
+
+### ToolInputGuardrail
+
+Runs before a tool's `execute` function. Receives the tool name, parsed arguments, and context:
+
+```ts title="tool-input-guardrail.ts"
+import type { ToolInputGuardrail } from "stratus-sdk/core";
+
+const noDeleteOps: ToolInputGuardrail<AppContext> = {
+  name: "no_delete_operations",
+  execute: async ({ toolName, toolArgs, context }) => {
+    if (toolName.startsWith("delete_") && !context.isAdmin) {
+      return { tripwireTriggered: true, outputInfo: "Admin access required" };
+    }
+    return { tripwireTriggered: false };
+  },
+};
+```
+
+### ToolOutputGuardrail
+
+Runs after a tool's `execute` function. Receives the tool name, result string, and context:
+
+```ts title="tool-output-guardrail.ts"
+import type { ToolOutputGuardrail } from "stratus-sdk/core";
+
+const noSensitiveData: ToolOutputGuardrail = {
+  name: "no_sensitive_data",
+  execute: async ({ toolName, toolResult, context }) => {
+    const hasPII = /\b\d{3}-\d{2}-\d{4}\b/.test(toolResult);
+    return { tripwireTriggered: hasPII };
+  },
+};
+```
+
+### Passing Tool Guardrails
+
+Tool guardrails are passed via `run()` / `stream()` options or `SessionConfig`:
+
+```ts title="tool-guardrails-usage.ts"
+await run(agent, input, {
+  toolInputGuardrails: [noDeleteOps], // [!code highlight]
+  toolOutputGuardrails: [noSensitiveData], // [!code highlight]
+});
+```
+
+<Callout type="info">
+Unlike input/output guardrails (which throw `TripwireTriggered` errors), tool guardrails return their results without throwing. The results are collected and available on `RunResult.inputGuardrailResults` and `RunResult.outputGuardrailResults`.
+</Callout>
+
+## Guardrail Results
+
+Guardrail execution results are available on the `RunResult`:
+
+```ts title="guardrail-results.ts"
+const result = await run(agent, input, {
+  toolInputGuardrails: [noDeleteOps],
+});
+
+for (const gr of result.inputGuardrailResults) {
+  console.log(`${gr.guardrailName}: triggered=${gr.result.tripwireTriggered}`);
+}
+for (const gr of result.outputGuardrailResults) {
+  console.log(`${gr.guardrailName}: triggered=${gr.result.tripwireTriggered}`);
+}
+```
+
+Each `GuardrailRunResult` contains:
+
+```ts
+interface GuardrailRunResult {
+  guardrailName: string;
+  result: GuardrailResult;
+}
+```
+
 ## Guardrails in Sessions
 
 ```ts title="session-guardrails.ts"
@@ -113,6 +192,8 @@ const session = createSession({
   model,
   inputGuardrails: [noPersonalInfo],
   outputGuardrails: [noCodeInOutput],
+  toolInputGuardrails: [noDeleteOps],
+  toolOutputGuardrails: [noSensitiveData],
 });
 ```
 

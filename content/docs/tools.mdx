@@ -45,6 +45,8 @@ const getWeather = tool({
 | `description` | `string` | What the tool does (helps the model decide when to use it) |
 | `parameters` | `z.ZodType` | Zod schema for the parameters |
 | `execute` | `(context, params, options?) => string` | Function that runs when the model calls the tool |
+| `timeout` | `number?` | Timeout in milliseconds. Throws `ToolTimeoutError` if exceeded |
+| `isEnabled` | `boolean \| (ctx) => boolean` | When `false`, the tool is excluded from the model's tool list |
 
 The `execute` function receives up to three arguments:
 1. **`context`** - The context object passed via `run()` options or session config
@@ -160,6 +162,45 @@ const searchTool = tool({
 ```
 
 See [Streaming - Abort Signal](/streaming#abort-signal) for details on passing a signal.
+
+## Timeout
+
+Set a `timeout` in milliseconds to limit how long a tool can run. If the tool doesn't complete in time, a `ToolTimeoutError` is thrown internally. The error message is sent back to the model as a tool result so it can recover.
+
+```ts title="timeout-tool.ts"
+const slowSearch = tool({
+  name: "search",
+  description: "Search with a timeout",
+  parameters: z.object({ query: z.string() }),
+  timeout: 5000, // 5 second limit // [!code highlight]
+  execute: async (_ctx, { query }) => {
+    return await slowExternalApi(query);
+  },
+});
+```
+
+<Callout type="info">
+`ToolTimeoutError` is caught by the run loop and converted to a tool error message. It does not propagate out of `run()` — the model sees the timeout and can respond accordingly.
+</Callout>
+
+## Conditional Tools (isEnabled)
+
+Use `isEnabled` to dynamically include or exclude a tool based on context. When `false`, the tool is not sent to the model at all.
+
+```ts title="conditional-tool.ts"
+const adminTool = tool({
+  name: "delete_user",
+  description: "Delete a user account",
+  parameters: z.object({ userId: z.string() }),
+  isEnabled: (ctx: AppContext) => ctx.isAdmin, // [!code highlight]
+  execute: async (ctx, { userId }) => {
+    await ctx.db.users.delete(userId);
+    return "User deleted";
+  },
+});
+```
+
+`isEnabled` accepts a `boolean` or a function that receives the context and returns `boolean | Promise<boolean>`. The check runs before each model call, so a tool can appear or disappear mid-run based on changing context.
 
 ## Error Handling
 

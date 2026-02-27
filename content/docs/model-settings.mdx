@@ -45,7 +45,14 @@ const creativeAgent = agent.clone({
 | `seed` | `number` | `undefined` | Seed for deterministic sampling. Repeated requests with the same seed and parameters should return the same result. |
 | `reasoningEffort` | `ReasoningEffort` | `undefined` | Controls how much reasoning effort the model spends. See [Reasoning models](#reasoning-models). |
 | `maxCompletionTokens` | `number` | `undefined` | Max tokens for the model's completion, including reasoning tokens. Use instead of `maxTokens` for reasoning models. |
+| `reasoningSummary` | `ReasoningSummary` | `undefined` | Controls reasoning summary output: `"auto"`, `"concise"`, or `"detailed"`. |
 | `promptCacheKey` | `string` | `undefined` | Influences prompt cache routing. Requests with the same key and prefix are more likely to hit cache. See [Prompt caching](#prompt-caching). |
+| `truncation` | `Truncation` | `undefined` | Input truncation strategy: `"auto"` (truncate oldest messages) or `"disabled"` (fail on overflow). |
+| `store` | `boolean` | `undefined` | Whether to store the request/response server-side. Required for `previousResponseId` chaining. |
+| `metadata` | `Record<string, string>` | `undefined` | Arbitrary key-value metadata attached to the API request. |
+| `user` | `string` | `undefined` | End-user identifier for abuse monitoring. |
+| `logprobs` | `boolean` | `undefined` | Whether to return log probabilities of output tokens. |
+| `topLogprobs` | `number` | `undefined` | Number of most likely tokens to return per position (0--20). Requires `logprobs: true`. |
 
 ## Reasoning models
 
@@ -175,7 +182,7 @@ const agent = new Agent({
 
 `toolUseBehavior` is separate from `modelSettings`. It is set directly on the agent and controls what happens _after_ a tool executes -- not what the model generates.
 
-<Tabs items={["run_llm_again", "stop_on_first_tool", "stopAtToolNames"]}>
+<Tabs items={["run_llm_again", "stop_on_first_tool", "stopAtToolNames", "Function"]}>
 <Tab value="run_llm_again">
 
 The default. After a tool executes, the result is sent back to the model so it can generate a follow-up response or call more tools.
@@ -225,6 +232,31 @@ const agent = new Agent({
 ```
 
 The agent can call `searchDocs` and `summarize` as many times as it needs. The run stops only when it calls `final_answer`.
+
+</Tab>
+<Tab value="Function">
+
+Pass a function to decide dynamically whether to stop after tool calls. The function receives all tool results from the current turn and returns `true` to stop or `false` to continue.
+
+```ts title="behavior-function.ts"
+const agent = new Agent({
+  name: "researcher",
+  model,
+  tools: [searchDocs, summarize, finalAnswer],
+  toolUseBehavior: (toolResults) => { // [!code highlight]
+    return toolResults.some((r) => r.toolName === "final_answer"); // [!code highlight]
+  }, // [!code highlight]
+});
+```
+
+The callback can also be `async`:
+
+```ts
+toolUseBehavior: async (toolResults) => {
+  const shouldStop = await checkCompletion(toolResults);
+  return shouldStop;
+},
+```
 
 </Tab>
 </Tabs>

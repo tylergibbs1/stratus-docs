@@ -19,6 +19,8 @@ Hooks let you run custom code at key points in the agent lifecycle. Use them for
 | `onSubagentStop` | After a subagent finishes execution |
 | `onSessionStart` | On the session's first `stream()` call |
 | `onSessionEnd` | After each session `stream()` completes |
+| `onLlmStart` | Before each LLM API call |
+| `onLlmEnd` | After each LLM API call |
 
 ## Usage
 
@@ -252,6 +254,74 @@ const session = createSession({
 `onSessionStart` fires once — on the first `stream()` call. `onSessionEnd` fires after every `stream()` call, including when errors occur.
 </Callout>
 
+### onLlmStart / onLlmEnd
+
+Fire before and after every LLM API call. Useful for logging, latency tracking, or request auditing.
+
+```ts title="llm-hooks.ts"
+hooks: {
+  onLlmStart: async ({ agent, messages, context }) => { // [!code highlight]
+    console.log(`LLM call for ${agent.name} with ${messages.length} messages`);
+  },
+  onLlmEnd: async ({ agent, response, context }) => { // [!code highlight]
+    console.log(`LLM responded: ${response.toolCallCount} tool calls`);
+  },
+}
+```
+
+## Run Hooks
+
+**Run hooks** fire across all agents in a run, including after handoffs. Unlike agent hooks (which are scoped to a single agent), run hooks observe the entire execution.
+
+Set them via `runHooks` in `run()` / `stream()` options or in `SessionConfig`:
+
+```ts title="run-hooks.ts"
+import { run } from "stratus-sdk/core";
+import type { RunHooks } from "stratus-sdk/core";
+
+const hooks: RunHooks = {
+  onAgentStart: async ({ agent }) => {
+    console.log(`Agent started: ${agent.name}`);
+  },
+  onAgentEnd: async ({ agent, output }) => {
+    console.log(`Agent ended: ${agent.name}`);
+  },
+  onHandoff: async ({ fromAgent, toAgent }) => {
+    console.log(`Handoff: ${fromAgent.name} → ${toAgent.name}`);
+  },
+  onToolStart: async ({ agent, toolName }) => {
+    console.log(`Tool started: ${toolName}`);
+  },
+  onToolEnd: async ({ agent, toolName, result }) => {
+    console.log(`Tool ended: ${toolName}`);
+  },
+  onLlmStart: async ({ agent, request }) => {
+    console.log(`LLM call with ${request.messages.length} messages`);
+  },
+  onLlmEnd: async ({ agent, response }) => {
+    console.log(`LLM responded: ${response.toolCallCount} tool calls`);
+  },
+};
+
+await run(agent, "Hello", { runHooks: hooks }); // [!code highlight]
+```
+
+### RunHooks reference
+
+| Hook | When it fires |
+| --- | --- |
+| `onAgentStart` | When an agent starts processing (including after handoffs) |
+| `onAgentEnd` | When an agent finishes (before handoff or at end) |
+| `onHandoff` | On every handoff between agents |
+| `onToolStart` | Before every tool execution |
+| `onToolEnd` | After every tool execution |
+| `onLlmStart` | Before every LLM API call |
+| `onLlmEnd` | After every LLM API call |
+
+<Callout type="info">
+Run hooks are complementary to agent hooks. Agent hooks fire on their specific agent and can control execution (deny/modify). Run hooks are observational and fire across all agents.
+</Callout>
+
 ## Hook Signatures
 
 ```ts title="types.ts"
@@ -306,6 +376,18 @@ interface AgentHooks<TContext> {
   }) => void | Promise<void>;
 
   onSessionEnd?: (params: {
+    context: TContext;
+  }) => void | Promise<void>;
+
+  onLlmStart?: (params: {
+    agent: Agent<TContext, any>;
+    messages: ChatMessage[];
+    context: TContext;
+  }) => void | Promise<void>;
+
+  onLlmEnd?: (params: {
+    agent: Agent<TContext, any>;
+    response: { content: string | null; toolCallCount: number };
     context: TContext;
   }) => void | Promise<void>;
 }

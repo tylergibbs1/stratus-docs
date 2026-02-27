@@ -61,6 +61,68 @@ const agent = new Agent({
 | `toolName` | `string` | Custom tool name (default: `transfer_to_{name}`) |
 | `toolDescription` | `string` | Custom description for the model |
 | `onHandoff` | `(ctx) => void` | Callback that fires when the handoff executes |
+| `inputType` | `z.ZodType` | Zod schema for structured input the model sends with the handoff |
+| `inputFilter` | `HandoffInputFilter` | Transform conversation history passed to the target agent |
+| `isEnabled` | `boolean \| (ctx) => boolean` | When `false`, the handoff is excluded from the model's tool list |
+
+### Structured Handoff Input
+
+Use `inputType` to let the model send structured data with a handoff. The Zod schema becomes the tool's parameter schema:
+
+```ts title="structured-handoff.ts"
+import { handoff } from "stratus-sdk/core";
+import { z } from "zod";
+
+const agent = new Agent({
+  name: "triage",
+  model,
+  handoffs: [
+    handoff({
+      agent: mathAgent,
+      inputType: z.object({ // [!code highlight]
+        problem: z.string().describe("The math problem to solve"), // [!code highlight]
+        difficulty: z.enum(["easy", "medium", "hard"]), // [!code highlight]
+      }), // [!code highlight]
+    }),
+  ],
+});
+```
+
+### Input Filter
+
+Use `inputFilter` to transform the conversation history before it's passed to the target agent. This is useful for trimming irrelevant messages or redacting sensitive content:
+
+```ts title="input-filter.ts"
+handoff({
+  agent: specialistAgent,
+  inputFilter: ({ history, input }) => { // [!code highlight]
+    // Only pass user and assistant messages (drop tool messages)
+    return history.filter((m) => m.role === "user" || m.role === "assistant");
+  },
+});
+```
+
+The filter receives a `HandoffInputData` object:
+
+```ts
+interface HandoffInputData {
+  history: ChatMessage[];  // Full conversation history
+  input?: unknown;         // Parsed input (if inputType is set)
+}
+```
+
+### Conditional Handoffs (isEnabled)
+
+Use `isEnabled` to dynamically include or exclude a handoff based on context:
+
+```ts title="conditional-handoff.ts"
+handoff({
+  agent: adminAgent,
+  isEnabled: (ctx: AppContext) => ctx.isAdmin, // [!code highlight]
+});
+```
+
+When `false`, the handoff tool is not sent to the model. Same pattern as [conditional tools](/tools#conditional-tools-isenabled).
 
 ## How Handoffs Work
 

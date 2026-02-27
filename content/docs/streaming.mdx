@@ -15,6 +15,7 @@ All streaming APIs yield `StreamEvent` objects:
 | `tool_call_start` | `toolCall: { id, name }` | A tool call has started |
 | `tool_call_delta` | `toolCallId, arguments` | Incremental tool call arguments |
 | `tool_call_done` | `toolCallId` | Tool call arguments are complete |
+| `hosted_tool_call` | `toolType, status` | A [built-in tool](/built-in-tools) is executing server-side |
 | `done` | `response: ModelResponse` | The model finished a response |
 
 ## Streaming with Sessions
@@ -53,6 +54,21 @@ const finalResult = await result;
 console.log(finalResult.output);
 console.log(finalResult.usage);
 ```
+
+### Hosted Tool Events
+
+When using [built-in tools](/built-in-tools) (web search, code interpreter, etc.), you'll receive `hosted_tool_call` events as the server-side tool executes:
+
+```ts title="hosted-tool-events.ts"
+for await (const event of session.stream()) {
+  if (event.type === "hosted_tool_call") { // [!code highlight]
+    console.log(`${event.toolType}: ${event.status}`);
+    // e.g. "web_search: searching", "code_interpreter: interpreting"
+  }
+}
+```
+
+The `status` field indicates the current state: `"in_progress"`, `"completed"`, `"searching"`, `"generating"`, or `"interpreting"`.
 
 ## Multi-Turn Tool Calls
 
@@ -167,3 +183,7 @@ Both `run()` and `stream()` produce a `RunResult`:
 | `usage` | `UsageInfo` | Accumulated token usage |
 | `lastAgent` | `Agent` | The agent that produced the final response |
 | `finishReason` | `string?` | The model's finish reason (`"stop"`, `"tool_calls"`, etc.) |
+| `numTurns` | `number` | Number of model calls made during the run |
+| `totalCostUsd` | `number` | Estimated cost in USD (requires `costEstimator`) |
+| `inputGuardrailResults` | `GuardrailRunResult[]` | Results from input guardrails |
+| `outputGuardrailResults` | `GuardrailRunResult[]` | Results from output guardrails |

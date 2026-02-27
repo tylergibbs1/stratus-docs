@@ -53,8 +53,20 @@ If the agent has an `outputType`, `finalOutput` contains the parsed and validate
 | `finishReason` | `FinishReason?` | The model's finish reason from the last call (`"stop"`, `"tool_calls"`, `"length"`, `"content_filter"`) |
 | `numTurns` | `number` | Number of model calls made during the run |
 | `totalCostUsd` | `number` | Estimated cost in USD (requires `costEstimator` in options, otherwise `0`) |
+| `responseId` | `string?` | The response ID from the last model call (when using `store: true`) |
+| `inputGuardrailResults` | `GuardrailRunResult[]` | Results from input guardrails that ran during this execution |
+| `outputGuardrailResults` | `GuardrailRunResult[]` | Results from output guardrails that ran during this execution |
 
 `UsageInfo` includes `promptTokens`, `completionTokens`, `totalTokens`, optional `cacheReadTokens`, `cacheCreationTokens`, and `reasoningTokens` fields.
+
+### toInputList()
+
+`RunResult` has a `toInputList()` method that returns the message history without system messages. Use it to chain one run's output as input to another:
+
+```ts title="chaining.ts"
+const result1 = await run(agent1, "Research this topic");
+const result2 = await run(agent2, result1.toInputList()); // [!code highlight]
+```
 
 ## stream()
 
@@ -94,6 +106,7 @@ You must fully consume the stream before awaiting `result`. If you skip the stre
 | `tool_call_start` | `toolCall: { id, name }` | A tool call has started |
 | `tool_call_delta` | `toolCallId, arguments` | Incremental tool call argument data |
 | `tool_call_done` | `toolCallId` | Tool call arguments are complete |
+| `hosted_tool_call` | `toolType, status` | A [built-in tool](/built-in-tools) is executing server-side |
 | `done` | `response: ModelResponse` | The model finished a response |
 
 When the model makes tool calls, you see multiple rounds of events. Each round starts with tool call events, followed by content events after the tools execute and the model responds again.
@@ -149,6 +162,13 @@ console.log(result.output); // "4"
 | `model` | `Model` | Agent's model | Override the agent's model for this run |
 | `costEstimator` | `CostEstimator` | `undefined` | Function that converts `UsageInfo` to a dollar cost. Enables `totalCostUsd` on the result |
 | `maxBudgetUsd` | `number` | `undefined` | Maximum dollar budget. Throws `MaxBudgetExceededError` when exceeded. Requires `costEstimator` |
+| `runHooks` | `RunHooks` | `undefined` | [Run-level hooks](/hooks#run-hooks) that fire across all agents |
+| `toolErrorFormatter` | `ToolErrorFormatter` | `undefined` | Custom formatter for tool error messages sent to the LLM |
+| `callModelInputFilter` | `CallModelInputFilter` | `undefined` | Transform model requests before they're sent to the API |
+| `errorHandlers` | `{ maxTurns? }` | `undefined` | Graceful error handlers. `maxTurns` returns a `RunResult` instead of throwing |
+| `toolInputGuardrails` | `ToolInputGuardrail[]` | `undefined` | [Tool guardrails](/guardrails#tool-guardrails) that run before tool execution |
+| `toolOutputGuardrails` | `ToolOutputGuardrail[]` | `undefined` | [Tool guardrails](/guardrails#tool-guardrails) that run after tool execution |
+| `resetToolChoice` | `boolean` | `undefined` | Reset `toolChoice` to `"auto"` after the first LLM call to prevent infinite loops |
 
 ```ts title="options.ts"
 const ac = new AbortController();
@@ -158,6 +178,68 @@ const result = await run(agent, "Summarize this document", {
   context: { userId: "user_123", db: myDatabase },
   maxTurns: 5,
   signal: ac.signal,
+});
+```
+
+### toolErrorFormatter
+
+Customize the error message sent to the model when a tool throws:
+
+```ts title="error-formatter.ts"
+await run(agent, input, {
+  toolErrorFormatter: (toolName, error) => { // [!code highlight]
+    return `Tool "${toolName}" failed: ${error instanceof Error ? error.message : String(error)}`;
+  },
+});
+```
+
+### callModelInputFilter
+
+Transform model requests before they're sent to the API. Useful for logging, redacting, or modifying messages:
+
+```ts title="input-filter.ts"
+await run(agent, input, {
+  callModelInputFilter: ({ agent, request, context }) => { // [!code highlight]
+    console.log(`Sending ${request.messages.length} messages to ${agent.name}`);
+    return request; // Return modified or original request
+  },
+});
+```
+
+### errorHandlers.maxTurns
+
+Handle max turns gracefully instead of throwing `MaxTurnsExceededError`:
+
+```ts title="max-turns-handler.ts"
+await run(agent, input, {
+  maxTurns: 3,
+  errorHandlers: {
+    maxTurns: ({ agent, messages, context, maxTurns }) => { // [!code highlight]
+      return new RunResult({
+        output: "I need more time to complete this task.",
+        messages,
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        lastAgent: agent,
+      });
+    },
+  },
+});
+```
+
+### resetToolChoice
+
+When using `toolChoice: "required"` or a specific function, the model is forced to call a tool on every turn — which can cause infinite loops. Set `resetToolChoice: true` to reset to `"auto"` after the first model call:
+
+```ts title="reset-tool-choice.ts"
+const agent = new Agent({
+  name: "assistant",
+  model,
+  tools: [getWeather],
+  modelSettings: { toolChoice: "required" },
+});
+
+await run(agent, "What's the weather?", {
+  resetToolChoice: true, // [!code highlight]
 });
 ```
 

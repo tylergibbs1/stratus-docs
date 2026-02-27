@@ -248,7 +248,7 @@ console.log(result.output); // "4"
 | --- | --- | --- |
 | `model` | `Model` | **Required.** The LLM model |
 | `instructions` | `Instructions` | System prompt |
-| `tools` | `FunctionTool[]` | Available tools |
+| `tools` | `AgentTool[]` | Available tools (function tools and [built-in tools](/built-in-tools)) |
 | `subagents` | `SubAgent[]` | [Sub-agents](/subagents) that run as tool calls |
 | `modelSettings` | `ModelSettings` | Temperature, max tokens, etc. |
 | `outputType` | `z.ZodType` | Structured output schema |
@@ -261,3 +261,9 @@ console.log(result.output); // "4"
 | `maxTurns` | `number` | Max model calls per `stream()` (default: 10) |
 | `costEstimator` | `CostEstimator` | Function that converts `UsageInfo` to a dollar cost. Enables `totalCostUsd` on results |
 | `maxBudgetUsd` | `number` | Maximum dollar budget per `stream()`. Throws `MaxBudgetExceededError` when exceeded |
+| `runHooks` | `RunHooks` | [Run-level hooks](/hooks#run-hooks) that fire across all agents |
+| `toolErrorFormatter` | `ToolErrorFormatter` | Custom formatter for tool error messages sent to the LLM |
+| `callModelInputFilter` | `CallModelInputFilter` | Transform model requests before they're sent to the API |
+| `toolInputGuardrails` | `ToolInputGuardrail[]` | [Tool guardrails](/guardrails#tool-guardrails) that run before tool execution |
+| `toolOutputGuardrails` | `ToolOutputGuardrail[]` | [Tool guardrails](/guardrails#tool-guardrails) that run after tool execution |
+| `resetToolChoice` | `boolean` | Reset `toolChoice` to `"auto"` after the first LLM call |
