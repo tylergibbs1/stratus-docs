@@ -128,7 +128,7 @@ import { createCodeModeTool } from "stratus-sdk/core";
 
 ### `FunctionExecutor`
 
-Runs code using `AsyncFunction` in the current runtime (Bun or Node.js).
+Runs code using `AsyncFunction` in the current runtime (Bun or Node.js). Fast but **not** sandboxed — code runs in the same V8 isolate.
 
 ```ts
 import { FunctionExecutor } from "stratus-sdk/core";
@@ -141,8 +141,24 @@ const executor = new FunctionExecutor({ timeout: 10_000 });
 | `timeout` | `number` | `30000` | Execution timeout in milliseconds. |
 
 <Callout type="warn">
-`FunctionExecutor` runs code in the same V8 isolate — it is **not** a secure sandbox. For production use with untrusted code, implement a custom `Executor` using isolated-vm, containers, or Cloudflare Workers.
+`FunctionExecutor` runs code in the same V8 isolate — it is **not** a secure sandbox. Use `WorkerExecutor` for isolation, or implement a custom `Executor` for stronger guarantees.
 </Callout>
+
+### `WorkerExecutor`
+
+Runs code in an isolated `worker_threads` worker — a separate V8 context with no access to the host's globals, `require`, or filesystem. Tool calls are dispatched back to the parent thread via `postMessage`.
+
+```ts
+import { WorkerExecutor } from "stratus-sdk/core";
+
+const executor = new WorkerExecutor({ timeout: 10_000 });
+```
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `timeout` | `number` | `30000` | Execution timeout in milliseconds. |
+
+Works in both Node.js and Bun. Each execution spawns a fresh worker that is terminated after completion or timeout.
 
 ### `Executor` interface
 
@@ -289,7 +305,7 @@ Rules:
 
 ## Limitations
 
-- `FunctionExecutor` is not a secure sandbox — it runs in the same process
+- `FunctionExecutor` is not a secure sandbox — it runs in the same process. Use `WorkerExecutor` for V8 isolation
 - Hosted tools (web search, code interpreter, etc.) are filtered out since they can't be called locally
 - Code quality depends on the model — better models write better code
 - Error messages from failed code are passed back to the LLM, which may retry
