@@ -10,6 +10,7 @@
 		"context",
 		"tools",
 		"built-in-tools",
+		"code-mode",
 		"subagents",
 		"sessions",
 		"streaming",

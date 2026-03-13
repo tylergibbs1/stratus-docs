@@ -1,0 +1,301 @@
+---
+title: Code Mode
+description: Let LLMs write code that orchestrates tools instead of calling them one at a time
+---
+
+Code Mode lets LLMs write and execute code that orchestrates your tools, instead of calling them one at a time. Inspired by [Cloudflare's Code Mode](https://blog.cloudflare.com/code-mode-the-better-way-to-use-mcp) and [CodeAct](https://machinelearning.apple.com/research/codeact), it works because LLMs are better at writing code than making individual tool calls — they've seen millions of lines of real-world TypeScript but only contrived tool-calling examples.
+
+<Callout type="warn">
+**Experimental** — this feature may have breaking changes in future releases. Use with caution in production.
+</Callout>
+
+## When to use Code Mode
+
+Code Mode is most useful when the LLM needs to:
+
+- **Chain multiple tool calls** with logic between them (conditionals, loops, error handling)
+- **Compose results** from different tools before returning
+- **Work with many tools** that would overwhelm the model's tool-calling ability
+- **Perform multi-step workflows** that would require many round-trips with standard tool calling
+
+For simple, single tool calls, standard [tool calling](/tools) is simpler and sufficient.
+
+## How it works
+
+```
+Normal:     LLM → tool_call → run loop → tool_call → run loop → response
+Code Mode:  LLM → execute_code → sandbox runs code calling tools → response
+```
+
+1. `createCodeModeTool()` generates TypeScript type definitions from your tools
+2. The LLM sees a single `execute_code` tool with the typed `codemode` API in its description
+3. The LLM writes an async arrow function that calls `codemode.toolName(args)`
+4. The code runs in an executor that dispatches `codemode.*` calls to your real tools
+5. Console output is captured and returned alongside the result
+
+## Quick start
+
+### 1. Define your tools
+
+```ts title="tools.ts"
+import { tool } from "stratus-sdk/core";
+import { z } from "zod";
+
+const getWeather = tool({
+  name: "get_weather",
+  description: "Get weather for a location",
+  parameters: z.object({ location: z.string() }),
+  execute: async (_ctx, { location }) =>
+    JSON.stringify({ temp: 72, city: location }),
+});
+
+const sendEmail = tool({
+  name: "send_email",
+  description: "Send an email",
+  parameters: z.object({
+    to: z.string(),
+    subject: z.string(),
+    body: z.string(),
+  }),
+  execute: async (_ctx, { to }) =>
+    JSON.stringify({ sent: true, to }),
+});
+```
+
+### 2. Create the code mode tool
+
+```ts title="code-mode-setup.ts"
+import { createCodeModeTool, FunctionExecutor } from "stratus-sdk/core";
+
+const executor = new FunctionExecutor({ timeout: 30_000 });
+
+const codemode = createCodeModeTool({
+  tools: [getWeather, sendEmail],
+  executor,
+});
+```
+
+### 3. Use it with an agent
+
+Pass the code mode tool to your agent like any other tool:
+
+```ts title="agent.ts"
+import { Agent, run } from "stratus-sdk/core";
+
+const agent = new Agent({
+  name: "assistant",
+  model,
+  instructions: "You are a helpful assistant.",
+  tools: [codemode], // [!code highlight]
+});
+
+const result = await run(agent, "Check London weather and email the team if it's nice");
+```
+
+When the LLM decides to use code mode, it writes an async arrow function like:
+
+```js
+async () => {
+  const weather = await codemode.get_weather({ location: "London" });
+  if (weather.temp > 60) {
+    await codemode.send_email({
+      to: "team@example.com",
+      subject: "Nice day!",
+      body: `It's ${weather.temp}° in ${weather.city}`,
+    });
+  }
+  return { weather, notified: weather.temp > 60 };
+};
+```
+
+All tool calls happen within a single `execute_code` invocation — no round-trips through the model between calls.
+
+## API Reference
+
+### `createCodeModeTool(options)`
+
+Returns a `FunctionTool` that can be added to any agent's `tools` array.
+
+```ts
+import { createCodeModeTool } from "stratus-sdk/core";
+```
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `tools` | `AgentTool[]` | **required** | Tools to make available inside the sandbox. Hosted tools are filtered out automatically. |
+| `executor` | `Executor` | **required** | Where to run the generated code. |
+| `description` | `string` | auto-generated | Custom tool description. Use `{{types}}` for the generated type definitions. |
+
+### `FunctionExecutor`
+
+Runs code using `AsyncFunction` in the current runtime (Bun or Node.js).
+
+```ts
+import { FunctionExecutor } from "stratus-sdk/core";
+
+const executor = new FunctionExecutor({ timeout: 10_000 });
+```
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `timeout` | `number` | `30000` | Execution timeout in milliseconds. |
+
+<Callout type="warn">
+`FunctionExecutor` runs code in the same V8 isolate — it is **not** a secure sandbox. For production use with untrusted code, implement a custom `Executor` using isolated-vm, containers, or Cloudflare Workers.
+</Callout>
+
+### `Executor` interface
+
+The `Executor` interface is deliberately minimal — implement it to run code in any sandbox:
+
+```ts
+interface Executor {
+  execute(
+    code: string,
+    fns: Record<string, (...args: unknown[]) => Promise<unknown>>,
+  ): Promise<ExecuteResult>;
+}
+
+interface ExecuteResult {
+  result: unknown;
+  error?: string;
+  logs?: string[];
+}
+```
+
+```ts title="custom-executor.ts"
+// Example: isolated-vm executor
+class IsolatedExecutor implements Executor {
+  async execute(code, fns): Promise<ExecuteResult> {
+    // Run code in a truly isolated environment
+    // Dispatch codemode.* calls back to fns
+    // Return { result, error?, logs? }
+  }
+}
+```
+
+### `generateTypes(tools)`
+
+Generates TypeScript type definitions from your tools. Used internally by `createCodeModeTool` but exported for custom use.
+
+```ts
+import { generateTypes } from "stratus-sdk/core";
+
+const types = generateTypes([getWeather, sendEmail]);
+// Returns:
+// type GetWeatherInput = { location: string }
+// type GetWeatherOutput = unknown
+// declare const codemode: {
+//   get_weather: (input: GetWeatherInput) => Promise<GetWeatherOutput>;
+//   send_email: (input: SendEmailInput) => Promise<SendEmailOutput>;
+// }
+```
+
+### `sanitizeToolName(name)`
+
+Converts tool names into valid JavaScript identifiers. Used internally but exported for custom use.
+
+```ts
+import { sanitizeToolName } from "stratus-sdk/core";
+
+sanitizeToolName("my-tool");   // "my_tool"
+sanitizeToolName("3d-render"); // "_3d_render"
+sanitizeToolName("delete");    // "delete_"
+```
+
+### `normalizeCode(code)`
+
+Normalizes LLM-generated code into an async arrow function. Strips markdown code fences and wraps bare statements.
+
+```ts
+import { normalizeCode } from "stratus-sdk/core";
+
+normalizeCode("const x = 1;");
+// "async () => {\nconst x = 1;\n}"
+
+normalizeCode("```js\nreturn 42;\n```");
+// "async () => {\nreturn 42;\n}"
+```
+
+## Context
+
+Context flows through from the agent to the code mode tool to your underlying tools:
+
+```ts title="context-flow.ts"
+interface AppContext {
+  userId: string;
+  db: Database;
+}
+
+const lookupTool = tool({
+  name: "lookup",
+  description: "Look up data",
+  parameters: z.object({ key: z.string() }),
+  execute: async (ctx: AppContext, { key }) => {
+    return JSON.stringify(await ctx.db.get(key, ctx.userId));
+  },
+});
+
+const codemode = createCodeModeTool<AppContext>({
+  tools: [lookupTool],
+  executor: new FunctionExecutor(),
+});
+
+const agent = new Agent<AppContext>({
+  name: "assistant",
+  model,
+  tools: [codemode],
+});
+
+await run(agent, "Look up my recent orders", {
+  context: { userId: "user_123", db: myDb },
+});
+```
+
+## Mixing with regular tools
+
+Code mode tools and regular tools can coexist in the same agent. The LLM decides when to write code vs. make a direct tool call:
+
+```ts title="mixed.ts"
+const agent = new Agent({
+  name: "assistant",
+  model,
+  tools: [
+    simpleCalculator,  // regular tool for quick math
+    codemode,          // code mode for complex orchestration
+  ],
+});
+```
+
+## Custom description
+
+Override the default tool description to guide the LLM's code generation. Use `{{types}}` as a placeholder for the generated type definitions:
+
+```ts
+const codemode = createCodeModeTool({
+  tools: [getWeather, sendEmail],
+  executor,
+  description: `Write JavaScript code to accomplish the task.
+
+Available API:
+{{types}}
+
+Rules:
+- Always handle errors with try/catch
+- Return structured results
+- Use console.log for debugging`,
+});
+```
+
+## Limitations
+
+- `FunctionExecutor` is not a secure sandbox — it runs in the same process
+- Hosted tools (web search, code interpreter, etc.) are filtered out since they can't be called locally
+- Code quality depends on the model — better models write better code
+- Error messages from failed code are passed back to the LLM, which may retry
+
+## Next steps
+
+- [Tools](/tools) — define function tools for code mode to orchestrate
+- [Built-in Tools](/built-in-tools) — server-side tools (not available in code mode)
+- [Agentic Tool Use](/guides/agentic-tool-use) — patterns for effective tool use
