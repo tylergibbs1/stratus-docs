@@ -6,11 +6,11 @@ description: Install Stratus and run your first agent
 ## Installation
 
 ```bash tab="bun"
-bun add stratus-sdk zod@4
+bun add @usestratus/sdk zod@4
 ```
 
 ```bash tab="npm"
-npm install stratus-sdk zod@4
+npm install @usestratus/sdk zod@4
 ```
 
 [Zod 4](https://zod.dev) is a peer dependency used for tool parameter schemas and structured output.
@@ -29,7 +29,7 @@ You need an Azure OpenAI resource with a deployed model. You'll need:
 <Tab value="API Key">
 
 ```ts title="model.ts"
-import { AzureResponsesModel } from "stratus-sdk";
+import { AzureResponsesModel } from "@usestratus/sdk";
 
 const model = new AzureResponsesModel({
   endpoint: process.env.AZURE_ENDPOINT!,
@@ -42,7 +42,7 @@ const model = new AzureResponsesModel({
 <Tab value="Entra ID">
 
 ```ts title="model.ts"
-import { AzureResponsesModel } from "stratus-sdk";
+import { AzureResponsesModel } from "@usestratus/sdk";
 import { DefaultAzureCredential, getBearerTokenProvider } from "@azure/identity";
 
 const tokenProvider = getBearerTokenProvider(
@@ -68,7 +68,7 @@ const model = new AzureResponsesModel({
 The simplest approach - send a message and get a result:
 
 ```ts title="one-shot.ts"
-import { prompt } from "stratus-sdk/core";
+import { prompt } from "@usestratus/sdk/core";
 
 const result = await prompt("What is 2 + 2?", { model });
 console.log(result.output); // "4"
@@ -80,7 +80,7 @@ console.log(result.output); // "4"
 For multi-turn conversations, use `createSession()`:
 
 ```ts title="session.ts"
-import { createSession } from "stratus-sdk/core";
+import { createSession } from "@usestratus/sdk/core";
 
 await using session = createSession({
   model,
@@ -105,7 +105,7 @@ for await (const event of session.stream()) {
 For lower-level control, create an `Agent` and use `run()` or `stream()` directly:
 
 ```ts title="agent.ts"
-import { Agent, run } from "stratus-sdk/core";
+import { Agent, run } from "@usestratus/sdk/core";
 
 const agent = new Agent({
   name: "assistant",

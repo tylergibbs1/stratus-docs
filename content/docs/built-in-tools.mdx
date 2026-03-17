@@ -14,8 +14,8 @@ Built-in tools require `AzureResponsesModel`. They are not supported by `AzureCh
 Give your agent access to live web search results.
 
 ```ts title="web-search.ts"
-import { AzureResponsesModel } from "stratus-sdk/azure";
-import { Agent, run, webSearchTool } from "stratus-sdk/core";
+import { AzureResponsesModel } from "@usestratus/sdk/azure";
+import { Agent, run, webSearchTool } from "@usestratus/sdk/core";
 
 const agent = new Agent({
   name: "researcher",
@@ -50,7 +50,7 @@ webSearchTool({
 Let the model write and execute Python code in a sandboxed container.
 
 ```ts title="code-interpreter.ts"
-import { Agent, run, codeInterpreterTool } from "stratus-sdk/core";
+import { Agent, run, codeInterpreterTool } from "@usestratus/sdk/core";
 
 const agent = new Agent({
   name: "analyst",
@@ -78,7 +78,7 @@ codeInterpreterTool({
 Connect to remote MCP servers for dynamic tool discovery.
 
 ```ts title="mcp.ts"
-import { Agent, run, mcpTool } from "stratus-sdk/core";
+import { Agent, run, mcpTool } from "@usestratus/sdk/core";
 
 const agent = new Agent({
   name: "connected-agent",
@@ -119,7 +119,7 @@ mcpTool({
 Let the model generate images inline.
 
 ```ts title="image-gen.ts"
-import { Agent, run, imageGenerationTool } from "stratus-sdk/core";
+import { Agent, run, imageGenerationTool } from "@usestratus/sdk/core";
 
 const agent = new Agent({
   name: "creative",
@@ -137,7 +137,7 @@ No configuration options. The API handles image generation server-side.
 Search over uploaded files in vector stores.
 
 ```ts title="file-search.ts"
-import { Agent, run, fileSearchTool } from "stratus-sdk/core";
+import { Agent, run, fileSearchTool } from "@usestratus/sdk/core";
 
 const agent = new Agent({
   name: "research-assistant",
@@ -171,7 +171,7 @@ fileSearchTool({
 Let the model control a virtual computer display (mouse, keyboard, screenshots).
 
 ```ts title="computer-use.ts"
-import { Agent, run, computerUseTool } from "stratus-sdk/core";
+import { Agent, run, computerUseTool } from "@usestratus/sdk/core";
 
 const agent = new Agent({
   name: "browser-agent",
@@ -208,7 +208,7 @@ computerUseTool({
 Built-in tools and function tools work together. The agent sees all tools and picks the right ones.
 
 ```ts title="mixed-tools.ts"
-import { Agent, run, tool, webSearchTool, codeInterpreterTool } from "stratus-sdk/core";
+import { Agent, run, tool, webSearchTool, codeInterpreterTool } from "@usestratus/sdk/core";
 import { z } from "zod";
 
 const saveResult = tool({

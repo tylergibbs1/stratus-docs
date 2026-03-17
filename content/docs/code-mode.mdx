@@ -38,7 +38,7 @@ Code Mode:  LLM → execute_code → sandbox runs code calling tools → respons
 ### 1. Define your tools
 
 ```ts title="tools.ts"
-import { tool } from "stratus-sdk/core";
+import { tool } from "@usestratus/sdk/core";
 import { z } from "zod";
 
 const getWeather = tool({
@@ -65,7 +65,7 @@ const sendEmail = tool({
 ### 2. Create the code mode tool
 
 ```ts title="code-mode-setup.ts"
-import { createCodeModeTool, FunctionExecutor } from "stratus-sdk/core";
+import { createCodeModeTool, FunctionExecutor } from "@usestratus/sdk/core";
 
 const executor = new FunctionExecutor({ timeout: 30_000 });
 
@@ -80,7 +80,7 @@ const codemode = createCodeModeTool({
 Pass the code mode tool to your agent like any other tool:
 
 ```ts title="agent.ts"
-import { Agent, run } from "stratus-sdk/core";
+import { Agent, run } from "@usestratus/sdk/core";
 
 const agent = new Agent({
   name: "assistant",
@@ -117,7 +117,7 @@ All tool calls happen within a single `execute_code` invocation — no round-tri
 Returns a `FunctionTool` that can be added to any agent's `tools` array.
 
 ```ts
-import { createCodeModeTool } from "stratus-sdk/core";
+import { createCodeModeTool } from "@usestratus/sdk/core";
 ```
 
 | Option | Type | Default | Description |
@@ -131,7 +131,7 @@ import { createCodeModeTool } from "stratus-sdk/core";
 Runs code using `AsyncFunction` in the current runtime (Bun or Node.js). Fast but **not** sandboxed — code runs in the same V8 isolate.
 
 ```ts
-import { FunctionExecutor } from "stratus-sdk/core";
+import { FunctionExecutor } from "@usestratus/sdk/core";
 
 const executor = new FunctionExecutor({ timeout: 10_000 });
 ```
@@ -149,7 +149,7 @@ const executor = new FunctionExecutor({ timeout: 10_000 });
 Runs code in an isolated `worker_threads` worker — a separate V8 context with no access to the host's globals, `require`, or filesystem. Tool calls are dispatched back to the parent thread via `postMessage`.
 
 ```ts
-import { WorkerExecutor } from "stratus-sdk/core";
+import { WorkerExecutor } from "@usestratus/sdk/core";
 
 const executor = new WorkerExecutor({ timeout: 10_000 });
 ```
@@ -195,7 +195,7 @@ class IsolatedExecutor implements Executor {
 Generates TypeScript type definitions from your tools. Used internally by `createCodeModeTool` but exported for custom use.
 
 ```ts
-import { generateTypes } from "stratus-sdk/core";
+import { generateTypes } from "@usestratus/sdk/core";
 
 const types = generateTypes([getWeather, sendEmail]);
 // Returns:
@@ -212,7 +212,7 @@ const types = generateTypes([getWeather, sendEmail]);
 Converts tool names into valid JavaScript identifiers. Used internally but exported for custom use.
 
 ```ts
-import { sanitizeToolName } from "stratus-sdk/core";
+import { sanitizeToolName } from "@usestratus/sdk/core";
 
 sanitizeToolName("my-tool");   // "my_tool"
 sanitizeToolName("3d-render"); // "_3d_render"
@@ -224,7 +224,7 @@ sanitizeToolName("delete");    // "delete_"
 Normalizes LLM-generated code into an async arrow function. Strips markdown code fences and wraps bare statements.
 
 ```ts
-import { normalizeCode } from "stratus-sdk/core";
+import { normalizeCode } from "@usestratus/sdk/core";
 
 normalizeCode("const x = 1;");
 // "async () => {\nconst x = 1;\n}"

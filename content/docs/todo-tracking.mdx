@@ -10,7 +10,7 @@ Todo tracking provides a structured way to manage tasks and display progress to 
 Create a `TodoList`, attach it to an agent via `todoTool()`, and listen for updates:
 
 ```ts title="todo-basic.ts"
-import { Agent, run, todoTool, TodoList } from "stratus-sdk/core";
+import { Agent, run, todoTool, TodoList } from "@usestratus/sdk/core";
 
 const todos = new TodoList();
 
@@ -56,7 +56,7 @@ The `activeForm` field is used when `status` is `"in_progress"` to describe the 
 Todo updates work with streaming. The `onUpdate` listener fires as soon as the agent's `todo_write` tool call is executed, even mid-stream:
 
 ```ts title="todo-streaming.ts"
-import { Agent, stream, todoTool, TodoList } from "stratus-sdk/core";
+import { Agent, stream, todoTool, TodoList } from "@usestratus/sdk/core";
 
 const todos = new TodoList();
 todos.onUpdate((items) => {
@@ -126,7 +126,7 @@ Because the agent sends the complete list each time, there's no risk of state dr
 Todo tracking works with sessions. Create a separate `TodoList` per session:
 
 ```ts title="todo-sessions.ts"
-import { createSession, todoTool, TodoList } from "stratus-sdk/core";
+import { createSession, todoTool, TodoList } from "@usestratus/sdk/core";
 
 const todos = new TodoList();
 const session = createSession({

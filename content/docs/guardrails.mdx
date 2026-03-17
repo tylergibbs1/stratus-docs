@@ -10,8 +10,8 @@ Guardrails validate agent input and output, allowing you to block harmful or inv
 Input guardrails run before the model is called. They check the user's message:
 
 ```ts title="input-guardrail.ts"
-import { Agent, run } from "stratus-sdk/core";
-import type { InputGuardrail } from "stratus-sdk/core";
+import { Agent, run } from "@usestratus/sdk/core";
+import type { InputGuardrail } from "@usestratus/sdk/core";
 
 const noPersonalInfo: InputGuardrail = {
   name: "no_personal_info",
@@ -33,7 +33,7 @@ const agent = new Agent({
 Output guardrails run after the model responds. They check the model's output:
 
 ```ts title="output-guardrail.ts"
-import type { OutputGuardrail } from "stratus-sdk/core";
+import type { OutputGuardrail } from "@usestratus/sdk/core";
 
 const noCodeInOutput: OutputGuardrail = {
   name: "no_code",
@@ -77,7 +77,7 @@ When a guardrail triggers, it throws an error that you can catch:
 import {
   InputGuardrailTripwireTriggered,
   OutputGuardrailTripwireTriggered,
-} from "stratus-sdk/core";
+} from "@usestratus/sdk/core";
 
 try {
   await run(agent, userInput);
@@ -115,7 +115,7 @@ Tool guardrails run before and after individual tool executions. Use them to val
 Runs before a tool's `execute` function. Receives the tool name, parsed arguments, and context:
 
 ```ts title="tool-input-guardrail.ts"
-import type { ToolInputGuardrail } from "stratus-sdk/core";
+import type { ToolInputGuardrail } from "@usestratus/sdk/core";
 
 const noDeleteOps: ToolInputGuardrail<AppContext> = {
   name: "no_delete_operations",
@@ -133,7 +133,7 @@ const noDeleteOps: ToolInputGuardrail<AppContext> = {
 Runs after a tool's `execute` function. Receives the tool name, result string, and context:
 
 ```ts title="tool-output-guardrail.ts"
-import type { ToolOutputGuardrail } from "stratus-sdk/core";
+import type { ToolOutputGuardrail } from "@usestratus/sdk/core";
 
 const noSensitiveData: ToolOutputGuardrail = {
   name: "no_sensitive_data",

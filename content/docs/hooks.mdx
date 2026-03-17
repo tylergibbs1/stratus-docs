@@ -25,7 +25,7 @@ Hooks let you run custom code at key points in the agent lifecycle. Use them for
 ## Usage
 
 ```ts title="hooks.ts"
-import { Agent } from "stratus-sdk/core";
+import { Agent } from "@usestratus/sdk/core";
 
 const agent = new Agent({
   name: "assistant",
@@ -276,8 +276,8 @@ hooks: {
 Set them via `runHooks` in `run()` / `stream()` options or in `SessionConfig`:
 
 ```ts title="run-hooks.ts"
-import { run } from "stratus-sdk/core";
-import type { RunHooks } from "stratus-sdk/core";
+import { run } from "@usestratus/sdk/core";
+import type { RunHooks } from "@usestratus/sdk/core";
 
 const hooks: RunHooks = {
   onAgentStart: async ({ agent }) => {

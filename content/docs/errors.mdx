@@ -25,7 +25,7 @@ StratusError
 Base class for all Stratus errors.
 
 ```ts
-import { StratusError } from "stratus-sdk/core";
+import { StratusError } from "@usestratus/sdk/core";
 
 try {
   await run(agent, input);
@@ -41,7 +41,7 @@ try {
 Thrown when the agent loop exceeds `maxTurns` without producing a final response.
 
 ```ts
-import { MaxTurnsExceededError } from "stratus-sdk/core";
+import { MaxTurnsExceededError } from "@usestratus/sdk/core";
 
 try {
   await run(agent, input, { maxTurns: 3 });
@@ -57,7 +57,7 @@ try {
 Thrown when the estimated cost of a run exceeds `maxBudgetUsd`. Requires a `costEstimator` in options. The `onStop` hook fires before this error is thrown.
 
 ```ts
-import { MaxBudgetExceededError, createCostEstimator } from "stratus-sdk/core";
+import { MaxBudgetExceededError, createCostEstimator } from "@usestratus/sdk/core";
 
 const estimator = createCostEstimator({
   inputTokenCostPer1k: 0.005,
@@ -85,7 +85,7 @@ Properties:
 Thrown when a run is cancelled via an `AbortSignal`. See [Streaming - Abort Signal](/streaming#abort-signal).
 
 ```ts
-import { RunAbortedError } from "stratus-sdk/core";
+import { RunAbortedError } from "@usestratus/sdk/core";
 
 const ac = new AbortController();
 setTimeout(() => ac.abort(), 5000);
@@ -108,7 +108,7 @@ Pre-aborted signals throw `RunAbortedError` immediately without making any API c
 Thrown when a tool exceeds its configured `timeout`. The run loop catches this internally and sends the error message back to the model as a tool result, so it does not propagate out of `run()`.
 
 ```ts
-import { ToolTimeoutError } from "stratus-sdk/core";
+import { ToolTimeoutError } from "@usestratus/sdk/core";
 
 const slowTool = tool({
   name: "slow_search",
@@ -134,7 +134,7 @@ To customize the error message sent to the model, use a `toolErrorFormatter` in 
 Thrown when the model API returns an error. Includes optional `status` and `code` fields:
 
 ```ts
-import { ModelError } from "stratus-sdk/core";
+import { ModelError } from "@usestratus/sdk/core";
 
 try {
   await run(agent, input);
@@ -150,7 +150,7 @@ try {
 A subclass of `ModelError` thrown when Azure's content filter blocks a request or response.
 
 ```ts
-import { ContentFilterError } from "stratus-sdk/core";
+import { ContentFilterError } from "@usestratus/sdk/core";
 
 try {
   await run(agent, input);

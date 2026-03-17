@@ -8,25 +8,25 @@ Complete reference for AI agents using the Stratus SDK. This page covers every t
 ## Installation
 
 ```bash
-bun add stratus-sdk zod
+bun add @usestratus/sdk zod
 ```
 
-Zod is a peer dependency. Both `stratus-sdk` and `stratus-sdk/core` are valid import paths.
+Zod is a peer dependency. Both `@usestratus/sdk` and `@usestratus/sdk/core` are valid import paths.
 
 ## Package Structure
 
 | Import | Contents |
 | --- | --- |
-| `stratus-sdk/core` | Provider-agnostic: Agent, Session, run loop, tools, handoffs, guardrails, hooks, tracing, errors |
-| `stratus-sdk/azure` | AzureResponsesModel, AzureChatCompletionsModel |
-| `stratus-sdk` | Re-exports both |
+| `@usestratus/sdk/core` | Provider-agnostic: Agent, Session, run loop, tools, handoffs, guardrails, hooks, tracing, errors |
+| `@usestratus/sdk/azure` | AzureResponsesModel, AzureChatCompletionsModel |
+| `@usestratus/sdk` | Re-exports both |
 
 ## Models
 
 ### AzureResponsesModel (Recommended)
 
 ```ts
-import { AzureResponsesModel } from "stratus-sdk/azure";
+import { AzureResponsesModel } from "@usestratus/sdk/azure";
 
 const model = new AzureResponsesModel({
   endpoint: "https://your-resource.openai.azure.com",
@@ -42,7 +42,7 @@ Supports all features including built-in hosted tools (web search, code interpre
 ### AzureChatCompletionsModel
 
 ```ts
-import { AzureChatCompletionsModel } from "stratus-sdk/azure";
+import { AzureChatCompletionsModel } from "@usestratus/sdk/azure";
 
 const model = new AzureChatCompletionsModel({
   endpoint: "https://your-resource.openai.azure.com",
@@ -85,7 +85,7 @@ interface Model {
 The core abstraction. Encapsulates instructions, tools, model, and behavior.
 
 ```ts
-import { Agent } from "stratus-sdk/core";
+import { Agent } from "@usestratus/sdk/core";
 
 const agent = new Agent({
   name: "assistant",              // required
@@ -137,7 +137,7 @@ Three execution methods:
 ### run() — Non-streaming
 
 ```ts
-import { run } from "stratus-sdk/core";
+import { run } from "@usestratus/sdk/core";
 
 const result = await run(agent, "Hello", {
   context: { userId: "123" },  // optional TContext
@@ -154,7 +154,7 @@ Input can be `string` or `ChatMessage[]`.
 ### stream() — Streaming
 
 ```ts
-import { stream } from "stratus-sdk/core";
+import { stream } from "@usestratus/sdk/core";
 
 const { stream: s, result: resultPromise } = stream(agent, "Hello", options);
 
@@ -170,7 +170,7 @@ You MUST consume the stream before awaiting the result promise.
 ### prompt() — One-shot convenience
 
 ```ts
-import { prompt } from "stratus-sdk/core";
+import { prompt } from "@usestratus/sdk/core";
 
 const result = await prompt("Hello", {
   model,
@@ -213,7 +213,7 @@ type StreamEvent =
 Local tools that execute your TypeScript code.
 
 ```ts
-import { tool } from "stratus-sdk/core";
+import { tool } from "@usestratus/sdk/core";
 import { z } from "zod";
 
 const getWeather = tool({
@@ -247,7 +247,7 @@ If `execute` throws, the error message is sent to the model as the tool result (
 Server-side tools that execute on Azure's infrastructure. Only supported by `AzureResponsesModel`.
 
 ```ts
-import { webSearchTool, codeInterpreterTool, mcpTool, imageGenerationTool } from "stratus-sdk/core";
+import { webSearchTool, codeInterpreterTool, mcpTool, imageGenerationTool } from "@usestratus/sdk/core";
 ```
 
 ### webSearchTool
@@ -326,7 +326,7 @@ isFunctionTool(tool) // tool is FunctionTool
 Multi-turn conversations with persistent message history.
 
 ```ts
-import { createSession } from "stratus-sdk/core";
+import { createSession } from "@usestratus/sdk/core";
 
 const session = createSession({
   model,
@@ -382,7 +382,7 @@ session.stream({ signal: AbortSignal.timeout(5000) })
 Child agents that execute as tool calls and return results to the parent.
 
 ```ts
-import { subagent } from "stratus-sdk/core";
+import { subagent } from "@usestratus/sdk/core";
 import { z } from "zod";
 
 const mathAgent = subagent({
@@ -413,7 +413,7 @@ Subagent errors are caught and returned as tool messages. The parent agent conti
 Transfer control from one agent to another permanently within a run.
 
 ```ts
-import { handoff } from "stratus-sdk/core";
+import { handoff } from "@usestratus/sdk/core";
 
 // Simple: auto-generates transfer_to_{name} tool
 const agent = new Agent({
@@ -461,7 +461,7 @@ Supported Zod types: objects, strings, numbers, booleans, arrays, enums, optiona
 Send images alongside text.
 
 ```ts
-import type { ContentPart } from "stratus-sdk/core";
+import type { ContentPart } from "@usestratus/sdk/core";
 
 const parts: ContentPart[] = [
   { type: "text", text: "What's in this image?" },
@@ -610,7 +610,7 @@ Matchers are checked in order. For `beforeToolCall`, first deny/modify short-cir
 Opt-in span-based tracing via AsyncLocalStorage. Zero overhead when inactive.
 
 ```ts
-import { withTrace } from "stratus-sdk/core";
+import { withTrace } from "@usestratus/sdk/core";
 
 const { result, trace } = await withTrace("my-trace", async () => {
   return run(agent, "Hello");
@@ -625,7 +625,7 @@ for (const span of trace.spans) {
 ### Custom Spans
 
 ```ts
-import { getCurrentTrace } from "stratus-sdk/core";
+import { getCurrentTrace } from "@usestratus/sdk/core";
 
 const trace = getCurrentTrace(); // undefined if not inside withTrace()
 if (trace) {
@@ -640,7 +640,7 @@ Span types: `"model_call"`, `"tool_execution"`, `"handoff"`, `"guardrail"`, `"su
 ## Usage & Cost Tracking
 
 ```ts
-import { createCostEstimator } from "stratus-sdk/core";
+import { createCostEstimator } from "@usestratus/sdk/core";
 
 const costEstimator = createCostEstimator({
   inputTokenCostPer1k: 0.005,
@@ -686,7 +686,7 @@ Throws `RunAbortedError`. Signal is propagated to tool `execute` functions via `
 Structured task progress for agent execution.
 
 ```ts
-import { TodoList, todoTool } from "stratus-sdk/core";
+import { TodoList, todoTool } from "@usestratus/sdk/core";
 
 const todos = new TodoList();
 todos.onUpdate((items) => renderProgress(items)); // fires on each update
@@ -715,7 +715,7 @@ StratusError (base)
 ```
 
 ```ts
-import { StratusError, ModelError, ContentFilterError, MaxTurnsExceededError } from "stratus-sdk/core";
+import { StratusError, ModelError, ContentFilterError, MaxTurnsExceededError } from "@usestratus/sdk/core";
 
 try {
   const result = await run(agent, input);
@@ -826,7 +826,7 @@ const result = await run(agent, "Analyze this dataset", {
 
 ## Complete Export List
 
-From `stratus-sdk/core`:
+From `@usestratus/sdk/core`:
 
 ```ts
 // Classes
@@ -866,7 +866,7 @@ WebSearchToolConfig, CodeInterpreterToolConfig, McpToolConfig,
 Todo, TodoStatus, TodoUpdateListener
 ```
 
-From `stratus-sdk/azure`:
+From `@usestratus/sdk/azure`:
 
 ```ts
 AzureResponsesModel, AzureChatCompletionsModel
