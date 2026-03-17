@@ -35,7 +35,7 @@ await server.deploy({
 Your entry file must export `handler`:
 
 ```ts title="src/server.ts"
-import { McpServer } from "@stratus/mcp-aws";
+import { McpServer } from "@usestratus/mcp-aws";
 
 const server = new McpServer("my-tools@1.0.0")
   .tool("ping", async () => "pong");
@@ -54,7 +54,7 @@ await server.destroy("my-mcp-server", "us-east-1");
 Also available as a standalone function:
 
 ```ts
-import { destroy } from "@stratus/mcp-aws";
+import { destroy } from "@usestratus/mcp-aws";
 await destroy("my-mcp-server", "us-east-1");
 ```
 

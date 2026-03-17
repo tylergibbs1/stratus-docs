@@ -1,12 +1,12 @@
 ---
-title: "@stratus/mcp-aws"
+title: "@usestratus/mcp-aws"
 description: Build, deploy, and manage MCP servers on AWS in TypeScript
 ---
 
-`@stratus/mcp-aws` is a TypeScript library for building MCP servers that deploy to AWS. Progressive disclosure, tool gating, code mode, and one-line Lambda deploys.
+`@usestratus/mcp-aws` is a TypeScript library for building MCP servers that deploy to AWS. Progressive disclosure, tool gating, code mode, and one-line Lambda deploys.
 
 <Callout type="info">
-`@stratus/mcp-aws` wraps the official `@modelcontextprotocol/sdk` — it adds AWS deployment, auth, gating, progressive disclosure, and observability on top of the standard MCP protocol.
+`@usestratus/mcp-aws` wraps the official `@modelcontextprotocol/sdk` — it adds AWS deployment, auth, gating, progressive disclosure, and observability on top of the standard MCP protocol.
 </Callout>
 
 ## Architecture
@@ -91,17 +91,17 @@ stateDiagram-v2
 ## Install
 
 ```bash tab="bun"
-bun add @stratus/mcp-aws zod@4
+bun add @usestratus/mcp-aws zod@4
 ```
 
 ```bash tab="npm"
-npm install @stratus/mcp-aws zod@4
+npm install @usestratus/mcp-aws zod@4
 ```
 
 ## Quick Start
 
 ```ts title="server.ts"
-import { McpServer } from "@stratus/mcp-aws";
+import { McpServer } from "@usestratus/mcp-aws";
 import { z } from "zod";
 
 const server = new McpServer("my-tools@1.0.0")
@@ -168,7 +168,7 @@ server.express().setup(app);
 await server.stdio();
 
 // Raw handler (Bun.serve, Deno.serve, any Web Standard runtime)
-import { createMcpHandler } from "@stratus/mcp-aws";
+import { createMcpHandler } from "@usestratus/mcp-aws";
 const handler = createMcpHandler({ createServer: () => myServer });
 ```
 

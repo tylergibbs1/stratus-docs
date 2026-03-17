@@ -12,7 +12,7 @@ Gates control who can call a tool and under what conditions. When a gate blocks,
 Check claims from the auth token:
 
 ```ts
-import { role } from "@stratus/mcp-aws";
+import { role } from "@usestratus/mcp-aws";
 
 server.tool("admin_action", { gate: role("admin") }, handler);
 server.tool("write", { gate: role("admin", "editor") }, handler); // any of these roles
@@ -23,7 +23,7 @@ server.tool("write", { gate: role("admin", "editor") }, handler); // any of thes
 Require another tool to be called first:
 
 ```ts
-import { requires } from "@stratus/mcp-aws";
+import { requires } from "@usestratus/mcp-aws";
 
 server
   .tool("review_trade", handler)
@@ -45,7 +45,7 @@ Workflow enforcement at the protocol level. No prompt engineering needed.
 Run arbitrary logic:
 
 ```ts
-import { check } from "@stratus/mcp-aws";
+import { check } from "@usestratus/mcp-aws";
 
 server.tool("update_deal", {
   gate: check(
@@ -66,7 +66,7 @@ server.tool("check_quota", {
 ### Rate Limiting
 
 ```ts
-import { rateLimit } from "@stratus/mcp-aws";
+import { rateLimit } from "@usestratus/mcp-aws";
 
 server.tool("expensive_op", {
   gate: rateLimit({ max: 10, windowMs: 60_000 }), // 10 per minute
@@ -80,7 +80,7 @@ Counters are per session + tool combination. Window resets after `windowMs`.
 ### `all(...)` — Every gate must pass
 
 ```ts
-import { all, role, requires, rateLimit } from "@stratus/mcp-aws";
+import { all, role, requires, rateLimit } from "@usestratus/mcp-aws";
 
 server.tool("approve_discount", {
   gate: all(
@@ -96,7 +96,7 @@ Returns the first failure.
 ### `any(...)` — At least one gate must pass
 
 ```ts
-import { any, role } from "@stratus/mcp-aws";
+import { any, role } from "@usestratus/mcp-aws";
 
 server.tool("view_report", {
   gate: any(role("admin"), role("analyst")),

@@ -8,7 +8,7 @@ Auth is configured once on the server. All transports inherit it.
 ## API Key
 
 ```ts
-import { apiKey } from "@stratus/mcp-aws";
+import { apiKey } from "@usestratus/mcp-aws";
 
 server.auth(apiKey({
   "sk-live-abc123": { subject: "user-1", roles: ["admin"], claims: { org: "acme" } },
@@ -25,7 +25,7 @@ server.auth(apiKey({ "my-token": { roles: ["admin"] } }, { headerName: "authoriz
 ## Cognito JWT
 
 ```ts
-import { cognito } from "@stratus/mcp-aws";
+import { cognito } from "@usestratus/mcp-aws";
 
 server.auth(cognito({
   userPoolId: "us-east-1_abc123",
@@ -61,7 +61,7 @@ server
 Tool handlers can access auth without explicit parameters:
 
 ```ts
-import { getAuthContext, getSession } from "@stratus/mcp-aws";
+import { getAuthContext, getSession } from "@usestratus/mcp-aws";
 
 server.tool("my_tool", async () => {
   const auth = getAuthContext();
@@ -88,7 +88,7 @@ type AuthContext = {
 ## Custom Provider
 
 ```ts
-import type { AuthProvider } from "@stratus/mcp-aws";
+import type { AuthProvider } from "@usestratus/mcp-aws";
 
 const myAuth: AuthProvider = {
   async authenticate(request) {

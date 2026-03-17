@@ -3,7 +3,7 @@ title: Tool Registration
 description: Define MCP tools with Zod schemas and auto-coerced return values
 ---
 
-Tools are the core of any MCP server. `@stratus/mcp-aws` provides three overloads for registration — from zero-config to full control — with auto-coerced return values so you never have to construct `{ content: [{ type: "text", text }] }` objects.
+Tools are the core of any MCP server. `@usestratus/mcp-aws` provides three overloads for registration — from zero-config to full control — with auto-coerced return values so you never have to construct `{ content: [{ type: "text", text }] }` objects.
 
 <Callout type="info">
 Return values are auto-coerced: strings, objects, and arrays are automatically wrapped in MCP content format. See [Return Value Coercion](#return-value-coercion) below.
@@ -92,7 +92,7 @@ type ToolContext = {
 Or use [AsyncLocalStorage](/mcp-aws/auth#asynclocalstorage-context) to access auth anywhere:
 
 ```ts
-import { getAuthContext } from "@stratus/mcp-aws";
+import { getAuthContext } from "@usestratus/mcp-aws";
 
 server.tool("my_tool", async () => {
   const auth = getAuthContext(); // no params needed

@@ -8,7 +8,7 @@ description: SSRF protection, VPC isolation, and RFC 9728 OAuth metadata
 Prevent tool handlers from accessing internal infrastructure via user-controlled URLs:
 
 ```ts
-import { assertSafeUrl, isBlockedUrl } from "@stratus/mcp-aws";
+import { assertSafeUrl, isBlockedUrl } from "@usestratus/mcp-aws";
 
 server.tool("fetch_url", z.object({ url: z.string() }), async ({ url }) => {
   assertSafeUrl(url); // throws if blocked

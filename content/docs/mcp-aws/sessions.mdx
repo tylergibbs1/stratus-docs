@@ -8,7 +8,7 @@ MCP sessions track tool visibility, gate state, call history, and auth context. 
 ## Memory Store (Dev/Test)
 
 ```ts
-import { MemorySessionStore } from "@stratus/mcp-aws";
+import { MemorySessionStore } from "@usestratus/mcp-aws";
 
 server.lambda({
   sessionStore: new MemorySessionStore({
@@ -23,7 +23,7 @@ Default when no store is specified. Data lost on Lambda cold start.
 ## DynamoDB Store (Production)
 
 ```ts
-import { DynamoSessionStore } from "@stratus/mcp-aws/dynamo";
+import { DynamoSessionStore } from "@usestratus/mcp-aws/dynamo";
 
 server.lambda({
   sessionStore: new DynamoSessionStore({
@@ -59,7 +59,7 @@ aws dynamodb update-time-to-live \
 Uses Bun's native `bun:sqlite`. Zero dependencies, file-based persistence.
 
 ```ts
-import { SqliteSessionStore } from "@stratus/mcp-aws";
+import { SqliteSessionStore } from "@usestratus/mcp-aws";
 
 server.lambda({
   sessionStore: new SqliteSessionStore({
@@ -89,7 +89,7 @@ Each session tracks:
 Implement the `SessionStore` interface:
 
 ```ts
-import type { SessionStore, McpSession } from "@stratus/mcp-aws";
+import type { SessionStore, McpSession } from "@usestratus/mcp-aws";
 
 class RedisSessionStore implements SessionStore {
   async get(sessionId: string): Promise<McpSession | undefined> {
