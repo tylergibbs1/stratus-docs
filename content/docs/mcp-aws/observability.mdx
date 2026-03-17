@@ -1,0 +1,83 @@
+---
+title: Observability
+description: Typed event system for tool calls, gate denials, and promotions
+---
+
+## Events
+
+Subscribe to server lifecycle events via `.on()`:
+
+```ts
+server
+  .on("tool:call", (e) => {
+    console.log(`[${e.toolName}] called by ${e.auth.subject}`);
+  })
+  .on("tool:result", (e) => {
+    metrics.histogram("mcp.tool.duration", e.durationMs, { tool: e.toolName });
+    if (e.isError) metrics.increment("mcp.tool.errors", { tool: e.toolName });
+  })
+  .on("gate:denied", (e) => {
+    audit.log(`Gate denied: ${e.toolName} — ${e.reason}`);
+  })
+  .on("tools:promoted", (e) => {
+    console.log(`Search "${e.query}" promoted: ${e.toolNames.join(", ")}`);
+  })
+  .on("tools:unlocked", (e) => {
+    console.log(`${e.toolNames.join(", ")} unlocked via ${e.prerequisite}`);
+  });
+```
+
+## Event Types
+
+| Event | Fires when | Key fields |
+|---|---|---|
+| `tool:call` | Tool handler is about to execute | `toolName`, `params`, `auth`, `sessionId` |
+| `tool:result` | Tool handler completed (success or error) | `toolName`, `durationMs`, `isError` |
+| `gate:denied` | A gate blocked a tool call | `toolName`, `reason`, `auth` |
+| `auth:success` | Authentication succeeded | `auth` |
+| `auth:failure` | Authentication failed | `timestamp` |
+| `tools:promoted` | `search_tools` promoted tools | `toolNames`, `query`, `sessionId` |
+| `tools:unlocked` | Prerequisite gate unlocked hidden tools | `toolNames`, `prerequisite`, `sessionId` |
+| `deploy:start` | `deploy()` started | `functionName`, `region` |
+| `deploy:complete` | `deploy()` finished | `functionName`, `url`, `durationMs` |
+
+## Removing Listeners
+
+```ts
+const listener = (e) => console.log(e.toolName);
+server.on("tool:call", listener);
+server.off("tool:call", listener);
+```
+
+## Error Resilience
+
+Listener exceptions are caught and swallowed — a broken listener never breaks tool execution.
+
+## Integration Examples
+
+### CloudWatch Metrics
+
+```ts
+import { CloudWatch } from "@aws-sdk/client-cloudwatch";
+const cw = new CloudWatch({});
+
+server.on("tool:result", async (e) => {
+  await cw.putMetricData({
+    Namespace: "MCP",
+    MetricData: [{
+      MetricName: "ToolDuration",
+      Value: e.durationMs,
+      Unit: "Milliseconds",
+      Dimensions: [{ Name: "ToolName", Value: e.toolName }],
+    }],
+  });
+});
+```
+
+### Structured Logging
+
+```ts
+server
+  .on("tool:call", (e) => console.log(JSON.stringify({ event: "tool.call", ...e })))
+  .on("gate:denied", (e) => console.log(JSON.stringify({ event: "gate.denied", ...e })));
+```

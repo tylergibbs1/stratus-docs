@@ -1,0 +1,75 @@
+---
+title: Code Mode
+description: Agent writes code that orchestrates tools — N calls in 1 round-trip
+---
+
+Instead of N sequential tool calls through the model, the agent writes one async function that calls all of them. Reduces latency from N round-trips to 2 (search + execute).
+
+## Enable Code Mode
+
+```ts
+const server = new McpServer({
+  name: "tools",
+  version: "1.0.0",
+  codeMode: { enabled: true, executor: "worker" },
+});
+```
+
+This auto-registers an `execute_workflow` tool. In `code-first` disclosure mode, it's the only tool visible alongside `search_tools`.
+
+## How It Works
+
+1. Agent calls `search_tools` → discovers tools with TypeScript type signatures
+2. Agent writes an async arrow function using `codemode.toolName(args)`
+3. Agent calls `execute_workflow` with the code
+4. Server validates all gates upfront (before execution)
+5. Code runs in isolated V8 via `WorkerExecutor`
+6. Tool calls are local function calls — no network overhead
+7. Result returned. Intermediate results never enter agent context.
+
+## Gate Pre-Validation
+
+Before code executes, the server extracts all `codemode.*` references and validates gates:
+
+```ts
+// If the code references codemode.execute_trade but the requires("review_trade")
+// gate hasn't been satisfied, execution is blocked BEFORE any code runs.
+```
+
+This prevents agents from bypassing workflow enforcement by embedding calls in code.
+
+## Executors
+
+| Executor | Isolation | Overhead | Use case |
+|---|---|---|---|
+| `FunctionExecutor` | None (same V8) | ~0ms | Dev/test, trusted tools |
+| `WorkerExecutor` | Separate V8 context | ~50ms | Production (default) |
+| Custom `Executor` | Your choice | Varies | `isolated-vm`, containers |
+
+## Wrap Any MCP Server
+
+`codeMcpServer()` takes an existing MCP SDK server and wraps it with code mode:
+
+```ts
+import { codeMcpServer } from "@stratus/mcp-aws";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+
+const original = new McpServer({ name: "tools", version: "1.0" });
+// ... register tools on original ...
+
+const codeServer = await codeMcpServer({ server: original });
+// codeServer has one tool: execute_code
+// LLM writes code calling original's tools
+```
+
+Useful for wrapping third-party MCP servers that have many tools.
+
+## Disclosure Modes
+
+| Mode | `tools/list` shows | Meta-tools |
+|---|---|---|
+| `all` | Every tool | None |
+| `progressive` | `always` tier only | `search_tools` (+ `execute_workflow` if enabled) |
+| `code-first` | Nothing | `search_tools` + `execute_workflow` only |
+
+`code-first` is the most efficient for Lambda — minimum context, minimum round-trips.

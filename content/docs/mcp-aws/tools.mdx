@@ -1,0 +1,101 @@
+---
+title: Tool Registration
+description: Define MCP tools with Zod schemas and auto-coerced return values
+---
+
+Tools are the core of any MCP server. `@stratus/mcp-aws` provides three overloads for registration — from zero-config to full control — with auto-coerced return values so you never have to construct `{ content: [{ type: "text", text }] }` objects.
+
+<Callout type="info">
+Return values are auto-coerced: strings, objects, and arrays are automatically wrapped in MCP content format. See [Return Value Coercion](#return-value-coercion) below.
+</Callout>
+
+## Three Overloads
+
+Pick the one that fits your tool:
+
+### Simple (no params)
+
+```ts
+server.tool("ping", async () => "pong");
+```
+
+### With Params
+
+```ts
+server.tool("greet", z.object({ name: z.string() }), async ({ name }) => {
+  return `Hello, ${name}!`;
+});
+```
+
+### Full Config
+
+```ts
+server.tool("admin_reset", {
+  description: "Reset a user account",
+  params: z.object({ userId: z.string() }),
+  tier: "hidden",
+  gate: role("admin"),
+  timeout: 5000,
+  tags: ["admin"],
+}, async ({ userId }) => {
+  return { reset: true, userId };
+});
+```
+
+## Return Value Coercion
+
+No more `{ content: [{ type: "text", text: "..." }] }`. Just return what makes sense:
+
+| Return type | What happens |
+|---|---|
+| `string` | Wrapped in text content |
+| `object` | JSON-serialized to text content |
+| `array` | JSON-serialized to text content |
+| `undefined` | Empty content |
+| `ToolResult` | Pass-through (full control) |
+
+```ts
+// All of these work:
+server.tool("str", async () => "hello");
+server.tool("obj", async () => ({ count: 42 }));
+server.tool("arr", async () => [1, 2, 3]);
+server.tool("void", async () => {});
+server.tool("full", async () => ({
+  content: [{ type: "text", text: "custom" }],
+  isError: false,
+}));
+```
+
+## Tool Options
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `description` | `string` | tool name | Human-readable description |
+| `params` | `z.ZodType` | none | Zod schema for input validation |
+| `tier` | `"always" \| "discoverable" \| "hidden"` | `"always"` | [Disclosure tier](/mcp-aws/progressive-disclosure) |
+| `tags` | `string[]` | none | Search tags for `search_tools` |
+| `gate` | `Gate` | none | [Access control](/mcp-aws/gating) |
+| `timeout` | `number` | none | Timeout in milliseconds |
+
+## Tool Context
+
+Handlers receive `(params, ctx)` where `ctx` has:
+
+```ts
+type ToolContext = {
+  session: McpSession;  // Current session state
+  auth: AuthContext;     // Current user's auth
+  signal?: AbortSignal;
+};
+```
+
+Or use [AsyncLocalStorage](/mcp-aws/auth#asynclocalstorage-context) to access auth anywhere:
+
+```ts
+import { getAuthContext } from "@stratus/mcp-aws";
+
+server.tool("my_tool", async () => {
+  const auth = getAuthContext(); // no params needed
+  return `Hello, ${auth.subject}`;
+});
+```

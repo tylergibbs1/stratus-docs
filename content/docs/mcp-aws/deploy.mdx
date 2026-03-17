@@ -1,0 +1,119 @@
+---
+title: Deploy
+description: One-line Lambda deploys with VPC and IAM auth options
+---
+
+## Deploy from Code
+
+```ts
+const { url, functionName, functionArn, region } = await server.deploy({
+  entry: "./src/server.ts",
+});
+console.log(url); // https://xxx.lambda-url.us-east-1.on.aws/
+```
+
+This bundles your server, creates an IAM role, deploys a Lambda function, creates a Function URL, and returns the live HTTPS endpoint. One call.
+
+## Deploy Options
+
+```ts
+await server.deploy({
+  entry: "./src/server.ts",       // Required: path to your server file
+  region: "us-east-1",            // Default: us-east-1
+  functionName: "my-mcp-server",  // Default: derived from server name
+  memory: 512,                    // Default: 256 MB
+  timeout: 30,                    // Default: 30 seconds
+  environment: {                  // Custom env vars
+    DATABASE_URL: "postgres://...",
+    LOG_LEVEL: "debug",
+  },
+});
+```
+
+## Export Your Handler
+
+Your entry file must export `handler`:
+
+```ts title="src/server.ts"
+import { McpServer } from "@stratus/mcp-aws";
+
+const server = new McpServer("my-tools@1.0.0")
+  .tool("ping", async () => "pong");
+
+export const handler = server.lambda();
+```
+
+## Destroy
+
+```ts
+await server.destroy();
+// or with explicit name/region:
+await server.destroy("my-mcp-server", "us-east-1");
+```
+
+Also available as a standalone function:
+
+```ts
+import { destroy } from "@stratus/mcp-aws";
+await destroy("my-mcp-server", "us-east-1");
+```
+
+## Security Modes
+
+### Public (Default)
+
+```ts
+await server.deploy({ entry: "./server.ts" });
+// urlAuth: "NONE" — anyone can call, use server.auth() for MCP-level auth
+```
+
+### IAM-Signed
+
+```ts
+await server.deploy({ entry: "./server.ts", urlAuth: "AWS_IAM" });
+// Callers must sign requests with SigV4
+```
+
+### No Public URL
+
+```ts
+await server.deploy({ entry: "./server.ts", urlAuth: "none" });
+// No Function URL created. Invoke via AWS SDK only.
+```
+
+### VPC-Only
+
+```ts
+await server.deploy({
+  entry: "./server.ts",
+  urlAuth: "none",
+  vpc: {
+    subnetIds: ["subnet-abc123", "subnet-def456"],
+    securityGroupIds: ["sg-xyz789"],
+  },
+});
+// Lambda runs inside the VPC. Only reachable from VPC resources.
+```
+
+The IAM role automatically gets `AWSLambdaVPCAccessExecutionRole` when VPC is configured.
+
+## Security Matrix
+
+| Scenario | `urlAuth` | `vpc` | Who can call |
+|---|---|---|---|
+| Public demo | `"NONE"` | none | Anyone on the internet |
+| Internal service | `"AWS_IAM"` | none | AWS services with SigV4 |
+| VPC-only | `"none"` | set | Only resources in the VPC |
+| VPC + IAM URL | `"AWS_IAM"` | set | VPC resources with SigV4 |
+
+## Update vs Create
+
+`deploy()` detects existing functions. First call creates; subsequent calls update the code.
+
+```ts
+// First run: creates function + role + URL
+await server.deploy({ entry: "./server.ts", functionName: "my-server" });
+
+// Later: updates code only (same function)
+await server.deploy({ entry: "./server.ts", functionName: "my-server" });
+```

@@ -1,0 +1,111 @@
+---
+title: Security
+description: SSRF protection, VPC isolation, and RFC 9728 OAuth metadata
+---
+
+## SSRF Protection
+
+Prevent tool handlers from accessing internal infrastructure via user-controlled URLs:
+
+```ts
+import { assertSafeUrl, isBlockedUrl } from "@stratus/mcp-aws";
+
+server.tool("fetch_url", z.object({ url: z.string() }), async ({ url }) => {
+  assertSafeUrl(url); // throws if blocked
+  return (await fetch(url)).text();
+});
+
+// Or check manually
+if (isBlockedUrl(url)) return "Access denied";
+```
+
+### Blocked Ranges
+
+| Range | Description |
+|---|---|
+| `127.0.0.0/8` | Loopback |
+| `10.0.0.0/8` | RFC 1918 private |
+| `172.16.0.0/12` | RFC 1918 private |
+| `192.168.0.0/16` | RFC 1918 private |
+| `169.254.0.0/16` | Link-local |
+| `169.254.169.254` | AWS EC2 metadata |
+| `fd00:ec2::254` | AWS IPv6 metadata |
+| `::1`, `fc00::/7`, `fe80::/10` | IPv6 private |
+| `metadata.google.internal` | GCP metadata |
+| Non-HTTP schemes | `file://`, `ftp://`, etc. |
+
+## VPC Deployment
+
+Deploy Lambda inside a VPC for network-level isolation:
+
+```ts
+await server.deploy({
+  entry: "./server.ts",
+  urlAuth: "none",  // no public URL
+  vpc: {
+    subnetIds: ["subnet-abc123", "subnet-def456"],
+    securityGroupIds: ["sg-xyz789"],
+  },
+});
+```
+
+The Lambda is only reachable from within the VPC (or via VPC peering/Transit Gateway). The IAM role automatically gets `AWSLambdaVPCAccessExecutionRole` for ENI management.
+
+### VPC + IAM Auth
+
+For maximum security, combine VPC isolation with IAM-signed Function URLs:
+
+```ts
+await server.deploy({
+  entry: "./server.ts",
+  urlAuth: "AWS_IAM",  // SigV4 required
+  vpc: {
+    subnetIds: ["subnet-abc", "subnet-def"],
+    securityGroupIds: ["sg-xyz"],
+  },
+});
+```
+
+Callers must be in the VPC AND sign requests with SigV4.
+
+## RFC 9728 OAuth Protected Resource Metadata
+
+For MCP clients that support OAuth discovery, serve the standard `.well-known/oauth-protected-resource` endpoint:
+
+```ts
+export const handler = server.lambda({
+  baseUrl: "https://api.example.com",
+  resourceMetadata: {
+    baseUrl: "https://api.example.com",
+    authorizationServers: [
+      "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_xxx",
+    ],
+    scopes: ["openid", "email", "profile"],
+  },
+});
+```
+
+This serves:
+
+```json
+{
+  "resource": "https://api.example.com/mcp",
+  "authorization_servers": ["https://cognito-idp.us-east-1.amazonaws.com/us-east-1_xxx"],
+  "bearer_methods_supported": ["header"],
+  "scopes_supported": ["openid", "email", "profile"]
+}
+```
+
+401 responses include the standard `WWW-Authenticate` header with `resource_metadata` URL, per RFC 9728. MCP clients like Claude Desktop can use this to automatically discover the authorization server and initiate OAuth flows.
+
+## Security Checklist
+
+- [ ] Use `server.auth()` to require authentication
+- [ ] Use `role()` gates on sensitive tools
+- [ ] Use `requires()` gates for destructive operations (require a review step first)
+- [ ] Use `assertSafeUrl()` in any tool that makes HTTP requests
+- [ ] Deploy with `vpc` config for internal-only servers
+- [ ] Use `urlAuth: "AWS_IAM"` for service-to-service communication
+- [ ] Use `DynamoSessionStore` in production (not MemorySessionStore)
+- [ ] Set `timeout` on tools that call external services
+- [ ] Use `rateLimit()` gates on expensive or dangerous tools

@@ -29,6 +29,8 @@
 		"errors",
 		"---Azure---",
 		"...azure",
+		"---MCP on AWS---",
+		"...mcp-aws",
 		"---Extensibility---",
 		"custom-models",
 		"guides",

@@ -1,0 +1,16 @@
+{
+	"title": "MCP on AWS",
+	"defaultOpen": true,
+	"pages": [
+		"index",
+		"tools",
+		"progressive-disclosure",
+		"gating",
+		"code-mode",
+		"auth",
+		"deploy",
+		"sessions",
+		"observability",
+		"security"
+	]
+}
