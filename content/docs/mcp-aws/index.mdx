@@ -68,25 +68,7 @@ sequenceDiagram
 
 ## Progressive Disclosure Flow
 
-```mermaid
-stateDiagram-v2
-    [*] --> Initial: Client connects
-    Initial --> Search: Agent calls search_tools
-    Search --> Promoted: Matches found, tools promoted
-    Promoted --> ListChanged: Server sends tools/list_changed
-    ListChanged --> Visible: Client re-fetches tools/list
-    Visible --> [*]: Agent calls promoted tools
-
-    state Initial {
-        [*] --> AlwaysTools: tools/list
-        AlwaysTools: Only "always" tier + search_tools
-    }
-
-    state Visible {
-        [*] --> AllVisible
-        AllVisible: "always" + promoted tools visible
-    }
-```
+When a client first connects, it only sees the `always` tier plus `search_tools`. The agent uses `search_tools` to discover relevant capabilities, and the server promotes matching tools into the visible set for that session. After promotion, the server emits `tools/list_changed`, the client refreshes `tools/list`, and the agent can call the newly visible tools directly.
 
 ## Install
 

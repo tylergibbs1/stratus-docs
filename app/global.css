@@ -75,3 +75,17 @@
     letter-spacing: -0.02em;
   }
 }
+
+@layer components {
+  .mermaid-diagram {
+    overflow-x: auto;
+    margin-block: 1.5rem;
+  }
+
+  .mermaid-diagram svg {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin-inline: auto;
+  }
+}
