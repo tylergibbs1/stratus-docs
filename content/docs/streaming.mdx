@@ -16,6 +16,9 @@ All streaming APIs yield `StreamEvent` objects:
 | `tool_call_delta` | `toolCallId, arguments` | Incremental tool call arguments |
 | `tool_call_done` | `toolCallId` | Tool call arguments are complete |
 | `hosted_tool_call` | `toolType, status` | A [built-in tool](/built-in-tools) is executing server-side |
+| `subagent_start` | `agentName: string` | A [subagent](/subagents) started executing |
+| `subagent_delta` | `agentName, content` | Content from a running subagent |
+| `subagent_end` | `agentName, result` | Subagent finished and returned a result |
 | `done` | `response: ModelResponse` | The model finished a response |
 
 ## Streaming with Sessions
@@ -69,6 +72,26 @@ for await (const event of session.stream()) {
 ```
 
 The `status` field indicates the current state: `"in_progress"`, `"completed"`, `"searching"`, `"generating"`, or `"interpreting"`.
+
+### Subagent Events
+
+When a subagent runs during streaming, its output is relayed through the parent stream in real time:
+
+```ts title="subagent-events.ts"
+for await (const event of session.stream()) {
+  switch (event.type) {
+    case "subagent_start":
+      console.log(`Delegating to ${event.agentName}...`);
+      break;
+    case "subagent_delta":
+      process.stdout.write(event.content); // real-time child output
+      break;
+    case "subagent_end":
+      console.log(`\n${event.agentName} returned: ${event.result}`);
+      break;
+  }
+}
+```
 
 ## Multi-Turn Tool Calls
 

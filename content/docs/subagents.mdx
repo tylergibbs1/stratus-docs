@@ -114,6 +114,26 @@ const subagentSpans = trace.spans
 console.log(subagentSpans[0].name); // "subagent:math"
 ```
 
+## Dynamic Subagents
+
+Spawn subagents at runtime instead of defining them statically:
+
+```ts title="dynamic-subagent.ts"
+import { run, subagent } from "@usestratus/sdk/core";
+
+const dynamicHelper = subagent({
+  agent: helperAgent,
+  inputSchema: z.object({ question: z.string() }),
+  mapInput: (params) => params.question,
+});
+
+const result = await run(parentAgent, "Help me with this", {
+  dynamicSubagents: [dynamicHelper], // [!code highlight]
+});
+```
+
+Dynamic subagents are merged with static subagents at runtime. Use this when the set of available child agents depends on runtime conditions.
+
 ## Subagents vs Handoffs
 
 | | Subagents | Handoffs |

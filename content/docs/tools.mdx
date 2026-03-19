@@ -51,6 +51,8 @@ const getWeather = tool({
 | `execute` | `(context, params, options?) => string` | Function that runs when the model calls the tool |
 | `timeout` | `number?` | Timeout in milliseconds. Throws `ToolTimeoutError` if exceeded |
 | `isEnabled` | `boolean \| (ctx) => boolean` | When `false`, the tool is excluded from the model's tool list |
+| `needsApproval` | `boolean \| (params, ctx) => boolean` | When truthy, pauses for human approval before execution. See [Human-in-the-Loop](#human-in-the-loop-needsapproval) |
+| `retries` | `object?` | Retry configuration for transient failures. See [Retries](#retries) |
 
 The `execute` function receives up to three arguments:
 1. **`context`** - The context object passed via `run()` options or session config
@@ -205,6 +207,107 @@ const adminTool = tool({
 ```
 
 `isEnabled` accepts a `boolean` or a function that receives the context and returns `boolean | Promise<boolean>`. The check runs before each model call, so a tool can appear or disappear mid-run based on changing context.
+
+## Human-in-the-Loop (needsApproval)
+
+Tools that need human approval before execution can set `needsApproval`. When the model calls this tool, the run pauses and returns an `InterruptedRunResult` instead of executing.
+
+```ts title="approval-tool.ts"
+const deleteFile = tool({
+  name: "delete_file",
+  description: "Delete a file",
+  parameters: z.object({ path: z.string() }),
+  needsApproval: true, // [!code highlight]
+  execute: async (_ctx, { path }) => {
+    await fs.rm(path);
+    return `Deleted ${path}`;
+  },
+});
+```
+
+`needsApproval` accepts a `boolean` or an async function that receives the parsed parameters and context:
+
+```ts title="conditional-approval.ts"
+const processPayment = tool({
+  name: "process_payment",
+  description: "Process a payment",
+  parameters: z.object({ amount: z.number(), recipient: z.string() }),
+  needsApproval: async (params, ctx) => params.amount > 100, // [!code highlight]
+  execute: async (_ctx, { amount, recipient }) => {
+    return await chargeCard(amount, recipient);
+  },
+});
+```
+
+When approval is needed, `run()` returns an `InterruptedRunResult`:
+
+```ts title="handle-approval.ts"
+import { run, resumeRun } from "@usestratus/sdk/core";
+import type { InterruptedRunResult } from "@usestratus/sdk/core";
+
+const result = await run(agent, "Delete /tmp/test.txt");
+
+if (result.interrupted) {
+  // Show pending tool calls to the user
+  for (const pending of result.pendingToolCalls) {
+    console.log(`Tool: ${pending.toolName}, Args: ${pending.arguments}`);
+  }
+
+  // Get human decision, then resume
+  const resumed = await resumeRun(result, [
+    { toolCallId: result.pendingToolCalls[0].toolCallId, decision: "approve" },
+  ]);
+  console.log(resumed.output);
+}
+```
+
+To deny a tool call:
+
+```ts
+await resumeRun(result, [
+  {
+    toolCallId: result.pendingToolCalls[0].toolCallId,
+    decision: "deny",
+    denyMessage: "User declined this action",
+  },
+]);
+```
+
+<Callout type="info">
+`needsApproval` works with both `run()` and `stream()`. In streaming mode, the stream completes and the result promise resolves to an `InterruptedRunResult`.
+</Callout>
+
+## Retries
+
+Configure automatic retries for tools that call unreliable external services:
+
+```ts title="retry-tool.ts"
+const flakyApi = tool({
+  name: "search_api",
+  description: "Search an external API",
+  parameters: z.object({ query: z.string() }),
+  retries: { // [!code highlight]
+    limit: 3,
+    delay: 1000,
+    backoff: "exponential",
+    shouldRetry: (error) => !(error instanceof ClientError),
+  },
+  execute: async (_ctx, { query }) => {
+    return await externalSearch(query);
+  },
+});
+```
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `limit` | `number` | — | **Required.** Maximum retry attempts |
+| `delay` | `number` | `1000` | Base delay in ms between retries |
+| `backoff` | `"fixed" \| "exponential"` | `"exponential"` | Backoff strategy |
+| `shouldRetry` | `(error) => boolean` | Retry all | Predicate to skip retries for specific errors |
+
+<Callout type="info">
+`ToolTimeoutError` is never retried — timeouts are treated as deterministic failures.
+</Callout>
 
 ## Error Handling
 

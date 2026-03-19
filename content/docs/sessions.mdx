@@ -267,3 +267,91 @@ console.log(result.output); // "4"
 | `toolInputGuardrails` | `ToolInputGuardrail[]` | [Tool guardrails](/guardrails#tool-guardrails) that run before tool execution |
 | `toolOutputGuardrails` | `ToolOutputGuardrail[]` | [Tool guardrails](/guardrails#tool-guardrails) that run after tool execution |
 | `resetToolChoice` | `boolean` | Reset `toolChoice` to `"auto"` after the first LLM call |
+| `store` | `SessionStore` | Persistence backend. Auto-saves after each stream. See [Persistence](#persistence) |
+| `sessionId` | `string` | ID for persistence. Auto-generated if not provided |
+| `onStateChange` | `SessionStateChangeListener` | Callback fired on state mutations. See [State Events](#state-events) |
+
+## Persistence
+
+Sessions can auto-persist to a pluggable backend via `SessionStore`:
+
+```ts title="persistent-session.ts"
+import { createSession, loadSession, MemorySessionStore } from "@usestratus/sdk/core";
+
+const store = new MemorySessionStore();
+
+const session = createSession({
+  model,
+  instructions: "You are a helpful assistant.",
+  store, // [!code highlight]
+  sessionId: "user-123", // [!code highlight]
+});
+
+session.send("Hello!");
+for await (const event of session.stream()) { /* ... */ }
+// Session auto-saved to store after stream completes
+```
+
+Load a previously saved session:
+
+```ts title="load-session.ts"
+const session = await loadSession(store, "user-123", {
+  model,
+  instructions: "You are a helpful assistant.",
+});
+
+if (session) {
+  session.send("What did we talk about?");
+  for await (const event of session.stream()) { /* ... */ }
+}
+```
+
+### SessionStore interface
+
+```ts
+interface SessionStore {
+  save(sessionId: string, snapshot: SessionSnapshot): Promise<void>;
+  load(sessionId: string): Promise<SessionSnapshot | undefined>;
+  delete(sessionId: string): Promise<void>;
+  list?(): Promise<string[]>;
+}
+```
+
+`MemorySessionStore` is a built-in in-memory implementation. For production, implement `SessionStore` with your preferred backend (SQLite, Redis, Postgres, etc.).
+
+<Callout type="info">
+Auto-save only runs when the stream completes successfully. If the stream errors, no save occurs to prevent persisting incomplete state.
+</Callout>
+
+## State Events
+
+Track session state changes for UI integration:
+
+```ts title="state-events.ts"
+const session = createSession({
+  model,
+  onStateChange: (event) => { // [!code highlight]
+    switch (event.type) {
+      case "stream_start":
+        showLoadingIndicator();
+        break;
+      case "message_added":
+        updateMessageList(event.message);
+        break;
+      case "saved":
+        showSaveConfirmation(event.sessionId);
+        break;
+      case "stream_end":
+        hideLoadingIndicator();
+        break;
+    }
+  },
+});
+```
+
+| Event | Fields | When |
+| --- | --- | --- |
+| `stream_start` | — | Stream begins |
+| `message_added` | `message: ChatMessage` | A message is added to history |
+| `stream_end` | — | Stream ends (always fires, even on error) |
+| `saved` | `sessionId: string` | Session persisted to store |

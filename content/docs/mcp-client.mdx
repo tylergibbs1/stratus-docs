@@ -1,0 +1,113 @@
+---
+title: MCP Client
+description: Connect to external MCP servers and use their tools locally
+---
+
+The MCP client connects to [Model Context Protocol](https://modelcontextprotocol.io/) servers, discovers their tools, and wraps them as `FunctionTool` instances for use with Stratus agents.
+
+<Callout type="info">
+This is different from the [built-in `mcpTool()`](/built-in-tools#mcp-model-context-protocol) which sends the MCP definition to Azure for server-side execution. `McpClient` connects to MCP servers **locally** — tools execute through the MCP server process, not through Azure.
+</Callout>
+
+## Quick Start
+
+```ts title="mcp-client.ts"
+import { McpClient, Agent, run } from "@usestratus/sdk/core";
+
+const client = new McpClient({
+  command: "npx",
+  args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+});
+
+await client.connect();
+const tools = await client.getTools();
+
+const agent = new Agent({
+  name: "file-assistant",
+  model,
+  tools, // MCP tools work like any other FunctionTool
+});
+
+const result = await run(agent, "List all files in /tmp");
+await client.disconnect();
+```
+
+## Configuration
+
+```ts
+const client = new McpClient({
+  command: "node",           // Command to spawn
+  args: ["mcp-server.js"],  // Arguments
+  env: { API_KEY: "..." },  // Environment variables
+  cwd: "/path/to/server",   // Working directory
+});
+```
+
+| Option | Type | Description |
+| --- | --- | --- |
+| `command` | `string` | **Required.** Command to spawn the MCP server process |
+| `args` | `string[]` | Arguments passed to the command |
+| `env` | `Record<string, string>` | Environment variables (merged with `process.env`) |
+| `cwd` | `string` | Working directory for the server process |
+
+## Lifecycle
+
+```ts
+// 1. Connect — spawns process, runs MCP initialize handshake
+await client.connect();
+
+// 2. Discover tools
+const tools = await client.getTools();
+
+// 3. Use tools with agents (tools call back to MCP server on execute)
+const result = await run(agent, input);
+
+// 4. Disconnect — kills process, rejects pending requests
+await client.disconnect();
+```
+
+### Async Dispose
+
+`McpClient` supports `Symbol.asyncDispose` for automatic cleanup:
+
+```ts
+await using client = new McpClient({ command: "node", args: ["server.js"] });
+await client.connect();
+const tools = await client.getTools();
+// client.disconnect() called automatically when scope exits
+```
+
+## Tool Discovery
+
+`getTools()` returns `FunctionTool[]` instances that proxy execution to the MCP server:
+
+```ts
+const tools = await client.getTools();
+
+for (const tool of tools) {
+  console.log(tool.name);        // MCP tool name
+  console.log(tool.description); // MCP tool description
+}
+```
+
+Each tool's `inputSchema` from the MCP server is forwarded to the LLM as the JSON Schema parameter definition, so the model knows exactly which arguments to provide.
+
+## Low-Level API
+
+For advanced use cases, you can call MCP methods directly:
+
+```ts
+// List available tools
+const definitions = await client.listTools();
+
+// Call a specific tool
+const result = await client.callTool("read_file", { path: "/tmp/test.txt" });
+```
+
+## Transport
+
+Currently, `McpClient` supports the **stdio transport** — the most common transport for local development MCP servers. The client spawns the server as a child process and communicates via JSON-RPC over stdin/stdout with Content-Length framing.
+
+<Callout>
+HTTP transports (SSE, streamable-http) for remote MCP servers are planned. For remote MCP servers today, use the [built-in `mcpTool()`](/built-in-tools#mcp-model-context-protocol) which delegates to Azure's server-side MCP client.
+</Callout>
