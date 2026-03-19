@@ -310,10 +310,14 @@ const model = new AzureResponsesModel({
 
 1. **`retry-after-ms` header** — Azure returns this with millisecond precision on 429s. Used when present.
 2. **`retry-after` header** — Standard header in seconds. Used as fallback.
-3. **Exponential backoff with jitter** — `1s × 2^attempt + random(0–1s)`, capped at 30s. Used when no headers are present.
+3. **Exponential backoff with jitter** — `1s × 2^attempt + random(0–1s)`. Used when no headers are present.
+
+All delays are capped at **30 seconds** — including server-provided values — to prevent a misbehaving server from stalling requests indefinitely.
+
+Backoff sleeps are **abort-aware**: if you cancel via `AbortSignal`, the retry exits immediately rather than waiting out the full delay.
 
 Retries are logged via `console.warn` with the wait duration and attempt count.
 
 <Callout type="info">
-`AzureResponsesModel` also retries SSE-level rate limits — when the HTTP response is 200 but the stream contains a `too_many_requests` error event before any content has been yielded.
+`AzureResponsesModel` also retries SSE-level rate limits — when the HTTP response is 200 but the stream contains a `too_many_requests` error event before any content has been yielded. SSE retries use a fixed budget of 3, independent of `maxRetries`, to avoid quadratic retry multiplication.
 </Callout>
