@@ -327,6 +327,12 @@ Backoff sleeps are **abort-aware**: if you cancel via `AbortSignal`, the retry e
 
 Retries are logged via `console.warn` with the wait duration and attempt count.
 
+### Proxy error detection
+
+Azure proxy errors sometimes return HTTP 200 with an HTML body instead of JSON/SSE. Both models detect this by checking the `content-type` header — if it's present but doesn't contain `json` or `event-stream`, the response is treated as a transient proxy error and retried with the same backoff logic. If retries are exhausted, a `ModelError` is thrown with the first 200 characters of the body.
+
+As a safety net, `getResponse()` also catches `SyntaxError` from `response.json()` and wraps it in a `ModelError` with the raw body snippet for debugging.
+
 <Callout type="info">
 `AzureResponsesModel` also retries SSE-level rate limits — when the HTTP response is 200 but the stream contains a `too_many_requests` error event before any content has been yielded. SSE retries use a fixed budget of 3, independent of `maxRetries`, to avoid quadratic retry multiplication.
 </Callout>
