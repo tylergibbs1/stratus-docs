@@ -35,6 +35,7 @@ const model = new AzureResponsesModel({
 | `deployment` | `string` | **Required.** Sent as `model` in request body |
 | `apiVersion` | `string` | API version (default: `"2025-04-01-preview"`) |
 | `store` | `boolean` | Whether to persist responses server-side (default: `false`). Enable for `previous_response_id` optimization. |
+| `maxRetries` | `number` | Maximum number of retries on 429 rate limits and network errors (default: `3`). See [Retry behavior](#retry-behavior). |
 
 ## AzureChatCompletionsModel
 
@@ -60,6 +61,7 @@ const model = new AzureChatCompletionsModel({
 | `azureAdTokenProvider` | `() => Promise<string>` | Entra ID token provider function. **Required** unless `apiKey` is set. See [Authentication](#authentication). |
 | `deployment` | `string` | **Required.** Model deployment name |
 | `apiVersion` | `string` | API version (default: `"2025-03-01-preview"`) |
+| `maxRetries` | `number` | Maximum number of retries on 429 rate limits and network errors (default: `3`). See [Retry behavior](#retry-behavior). |
 
 <Callout type="info">
 Both models are interchangeable for function tools. Swap one for the other without changing any agent, tool, or session code. [Built-in tools](/built-in-tools) (web search, code interpreter, MCP, image generation) are only supported by `AzureResponsesModel`.
@@ -289,4 +291,29 @@ try {
 }
 ```
 
-Both models also retry on `429` (rate limit) responses with exponential backoff, respecting the `Retry-After` header when present.
+## Retry Behavior
+
+Both models automatically retry on **429 (rate limit)** responses and **network errors** (timeouts, connection resets, DNS failures). Retries are transparent to the caller — the `AbortSignal` from `RunOptions.signal` still propagates through, so timeouts work across retries.
+
+The default is 3 retries. Configure it per model:
+
+```ts title="retry-config.ts"
+const model = new AzureResponsesModel({
+  endpoint: "https://your-resource.openai.azure.com",
+  apiKey: process.env.AZURE_API_KEY!,
+  deployment: "gpt-5.2",
+  maxRetries: 5, // [!code highlight]
+});
+```
+
+### Backoff strategy
+
+1. **`retry-after-ms` header** — Azure returns this with millisecond precision on 429s. Used when present.
+2. **`retry-after` header** — Standard header in seconds. Used as fallback.
+3. **Exponential backoff with jitter** — `1s × 2^attempt + random(0–1s)`, capped at 30s. Used when no headers are present.
+
+Retries are logged via `console.warn` with the wait duration and attempt count.
+
+<Callout type="info">
+`AzureResponsesModel` also retries SSE-level rate limits — when the HTTP response is 200 but the stream contains a `too_many_requests` error event before any content has been yielded.
+</Callout>
