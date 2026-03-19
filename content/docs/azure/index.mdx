@@ -293,7 +293,16 @@ try {
 
 ## Retry Behavior
 
-Both models automatically retry on **429 (rate limit)** responses and **network errors** (timeouts, connection resets, DNS failures). Retries are transparent to the caller — the `AbortSignal` from `RunOptions.signal` still propagates through, so timeouts work across retries.
+Both models automatically retry on transient errors and **network errors** (timeouts, connection resets, DNS failures). Retries are transparent to the caller — the `AbortSignal` from `RunOptions.signal` still propagates through, so timeouts work across retries.
+
+### Retryable status codes
+
+| Code | Meaning |
+| --- | --- |
+| `429` | Rate limited — too many requests |
+| `500` | Internal server error — transient capacity issue |
+| `502` | Bad gateway — upstream infrastructure issue |
+| `503` | Service unavailable — server temporarily down |
 
 The default is 3 retries. Configure it per model:
 
