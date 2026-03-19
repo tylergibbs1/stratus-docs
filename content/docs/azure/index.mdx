@@ -172,11 +172,17 @@ interface ModelResponse {
   toolCalls: ToolCall[];
   usage?: UsageInfo;
   finishReason?: FinishReason;
-  responseId?: string; // [!code highlight]
+  responseId?: string;
+  incompleteDetails?: { reason?: string }; // [!code highlight]
+  outputItems?: Record<string, unknown>[]; // [!code highlight]
 }
 ```
 
 `responseId` is populated by `AzureResponsesModel` and tracked across turns by the run loop. It's also available on `RunResult.responseId`.
+
+`incompleteDetails` is populated when a response is truncated (e.g. due to `max_output_tokens`). The `reason` field describes why.
+
+`outputItems` is an escape hatch for Responses API output item types the SDK doesn't have first-class support for — such as `mcp_approval_request`, `image_generation_call` results, and `code_interpreter_call` results. These items are passed through as raw objects so you can inspect them directly.
 
 ### UsageInfo
 

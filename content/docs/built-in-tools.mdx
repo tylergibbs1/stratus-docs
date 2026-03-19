@@ -65,13 +65,17 @@ const result = await run(agent, "Calculate the first 20 Fibonacci numbers");
 
 ```ts title="code-interpreter-config.ts"
 codeInterpreterTool({
-  container: { type: "auto" }, // default
+  container: {
+    type: "auto",
+    file_ids: ["file-abc123", "file-def456"], // optional: pre-upload files to container
+  },
 });
 ```
 
 | Option | Type | Description |
 | --- | --- | --- |
-| `container` | `{ type: string }` | Container configuration. Defaults to `{ type: "auto" }`. |
+| `container.type` | `string` | Container type. Defaults to `"auto"`. |
+| `container.file_ids` | `string[]` | File IDs to upload to the container. Files are available for the model to read/process. |
 
 ## MCP (Model Context Protocol)
 

@@ -1,9 +1,9 @@
 ---
 title: Multimodal Input
-description: Send images and mixed content to agents
+description: Send images, files, audio, and mixed content to agents
 ---
 
-Send text, images, or both to any agent using `ContentPart` arrays.
+Send text, images, files (PDFs), audio, or any combination to agents using `ContentPart` arrays.
 
 ## Sending an image
 
@@ -106,6 +106,60 @@ const parts: ContentPart[] = [
 Use `"low"` when you only need a general understanding of the image. It processes faster and consumes fewer tokens. Use `"high"` when fine details matter, such as reading text in screenshots or analyzing charts.
 </Callout>
 
+## Sending a file (PDF)
+
+Pass PDF files as base64 data URLs or file IDs. Only supported by `AzureResponsesModel`.
+
+```ts title="pdf-input.ts"
+import { readFile } from "node:fs/promises";
+import type { ChatMessage } from "@usestratus/sdk/core";
+
+const buffer = await readFile("./report.pdf");
+const dataUrl = `data:application/pdf;base64,${buffer.toString("base64")}`;
+
+const messages: ChatMessage[] = [
+  {
+    role: "user",
+    content: [
+      { type: "file", file: { url: dataUrl }, filename: "report.pdf" },
+      { type: "text", text: "Summarize this PDF" },
+    ],
+  },
+];
+
+const result = await run(agent, messages);
+```
+
+If you've uploaded the file via the Azure Files API, use a file ID instead:
+
+```ts title="file-id-input.ts"
+const messages: ChatMessage[] = [
+  {
+    role: "user",
+    content: [
+      { type: "file", file: { file_id: "assistant-KaVLJQ..." } },
+      { type: "text", text: "What does this document say?" },
+    ],
+  },
+];
+```
+
+## Sending audio
+
+Pass audio as a URL or inline base64 data. Only supported by `AzureResponsesModel`.
+
+```ts title="audio-input.ts"
+const messages: ChatMessage[] = [
+  {
+    role: "user",
+    content: [
+      { type: "audio", audio: { data: base64AudioData, format: "wav" } },
+      { type: "text", text: "Transcribe this audio" },
+    ],
+  },
+];
+```
+
 ## With sessions
 
 `session.send()` accepts a `ContentPart[]` directly:
@@ -176,10 +230,25 @@ interface ImageContentPart {
   };
 }
 
-type ContentPart = TextContentPart | ImageContentPart;
+interface FileContentPart {
+  type: "file";
+  file: { url: string } | { file_id: string };
+  filename?: string;
+}
+
+interface AudioContentPart {
+  type: "audio";
+  audio: { url: string } | { data: string; format: "wav" | "mp3" };
+}
+
+type ContentPart = TextContentPart | ImageContentPart | FileContentPart | AudioContentPart;
 ```
 
 `UserMessage.content` accepts either a plain `string` or a `ContentPart[]` array. When you pass a string, it behaves as a single text part.
+
+<Callout type="info">
+`FileContentPart` and `AudioContentPart` are only supported by `AzureResponsesModel`. They are converted to the Responses API's `input_file` and `input_audio` types respectively.
+</Callout>
 
 ## Next steps
 
