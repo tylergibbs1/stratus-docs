@@ -53,6 +53,11 @@ const creativeAgent = agent.clone({
 | `user` | `string` | `undefined` | End-user identifier for abuse monitoring. |
 | `logprobs` | `boolean` | `undefined` | Whether to return log probabilities of output tokens. |
 | `topLogprobs` | `number` | `undefined` | Number of most likely tokens to return per position (0--20). Requires `logprobs: true`. |
+| `prediction` | `PredictedOutput` | `undefined` | Predicted output for faster completions. Chat Completions only. See [Predicted output](#predicted-output). |
+| `modalities` | `Modality[]` | `["text"]` | Output modalities. Set to `["text", "audio"]` for audio output. Chat Completions only. See [Audio output](#audio-output). |
+| `audio` | `AudioConfig` | `undefined` | Audio voice and format config. Requires `modalities: ["text", "audio"]`. Chat Completions only. |
+| `dataSources` | `DataSource[]` | `undefined` | Azure On Your Data sources for RAG. Chat Completions only. See [Data sources](#data-sources). |
+| `contextManagement` | `ContextManagement` | `undefined` | Server-side context compaction rules. Responses API only. See [Context compaction](#context-compaction). |
 
 ## Reasoning models
 
@@ -281,6 +286,98 @@ const agent = new Agent({
 ```
 
 See [Structured Output](/structured-output) for details.
+
+## Predicted output
+
+Predicted output speeds up completions when you know roughly what the model will return (e.g. code edits). The model diffs against your prediction instead of generating from scratch.
+
+```ts title="predicted-output.ts"
+const agent = new Agent({
+  name: "editor",
+  model,
+  modelSettings: {
+    prediction: { // [!code highlight]
+      type: "content", // [!code highlight]
+      content: existingCode, // [!code highlight]
+    }, // [!code highlight]
+  },
+});
+```
+
+<Callout type="info">
+Predicted output is only supported with the Chat Completions API (`AzureChatCompletionsModel`) on API version `2025-01-01-preview` or later.
+</Callout>
+
+## Audio output
+
+For `gpt-4o-audio` deployments, you can request audio output alongside text.
+
+```ts title="audio-output.ts"
+const agent = new Agent({
+  name: "narrator",
+  model,
+  modelSettings: {
+    modalities: ["text", "audio"], // [!code highlight]
+    audio: { voice: "alloy", format: "mp3" }, // [!code highlight]
+  },
+});
+```
+
+Available voices: `"alloy"`, `"echo"`, `"fable"`, `"onyx"`, `"nova"`, `"shimmer"`.
+
+Available formats: `"wav"`, `"mp3"`, `"flac"`, `"opus"`, `"pcm16"`.
+
+<Callout type="info">
+Audio output is only supported with the Chat Completions API (`AzureChatCompletionsModel`).
+</Callout>
+
+## Data sources
+
+Azure On Your Data lets you ground model responses in your own data via Azure Search, Cosmos DB, and other Azure data sources. The model queries the data source and includes relevant results in its context.
+
+```ts title="data-sources.ts"
+const agent = new Agent({
+  name: "rag-agent",
+  model,
+  modelSettings: {
+    dataSources: [{ // [!code highlight]
+      type: "azure_search", // [!code highlight]
+      parameters: { // [!code highlight]
+        endpoint: "https://search.example.com", // [!code highlight]
+        index_name: "knowledge-base", // [!code highlight]
+        authentication: { type: "api_key", key: process.env.SEARCH_KEY! }, // [!code highlight]
+      }, // [!code highlight]
+    }], // [!code highlight]
+  },
+});
+```
+
+<Callout type="info">
+Data sources are only supported with the Chat Completions API (`AzureChatCompletionsModel`). See the [Azure On Your Data documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/use-your-data) for the full schema.
+</Callout>
+
+## Context compaction
+
+For long-running sessions on the Responses API, server-side context compaction shrinks the context window while preserving essential information.
+
+```ts title="context-compaction.ts"
+const agent = new Agent({
+  name: "long-session",
+  model: responsesModel,
+  modelSettings: {
+    contextManagement: [{ // [!code highlight]
+      type: "compaction", // [!code highlight]
+      compact_threshold: 200000, // [!code highlight]
+    }], // [!code highlight]
+  },
+});
+```
+
+When the output token count crosses `compact_threshold`, the API automatically compacts the context and emits a compaction item. On subsequent turns the compaction item carries forward essential context using fewer tokens.
+
+<Callout type="info">
+Context compaction is only supported with the Responses API (`AzureResponsesModel`).
+</Callout>
 
 ## Next steps
 

@@ -267,9 +267,39 @@ console.log(result.output); // "4"
 | `toolInputGuardrails` | `ToolInputGuardrail[]` | [Tool guardrails](/guardrails#tool-guardrails) that run before tool execution |
 | `toolOutputGuardrails` | `ToolOutputGuardrail[]` | [Tool guardrails](/guardrails#tool-guardrails) that run after tool execution |
 | `resetToolChoice` | `boolean` | Reset `toolChoice` to `"auto"` after the first LLM call |
+| `allowedTools` | `string[]` | Restrict which tools are available. Supports glob wildcards. See [Running Agents - Allowed tools](/running-agents#allowed-tools) |
+| `canUseTool` | `CanUseTool` | Permission callback invoked before any tool executes. See [Running Agents - Tool permissions](/running-agents#tool-permissions) |
 | `store` | `SessionStore` | Persistence backend. Auto-saves after each stream. See [Persistence](#persistence) |
 | `sessionId` | `string` | ID for persistence. Auto-generated if not provided |
 | `onStateChange` | `SessionStateChangeListener` | Callback fired on state mutations. See [State Events](#state-events) |
+
+## Tool Management
+
+Sessions support adding, removing, and replacing tools between turns. This enables hot-swapping MCP tools or dynamically adjusting capabilities.
+
+```ts title="tool-management.ts"
+const session = createSession({ model, tools: [getWeather] });
+
+// Add tools mid-session (e.g. after connecting a new MCP server)
+const mcpTools = await mcpClient.getTools();
+session.addTools(mcpTools); // [!code highlight]
+
+// Remove tools by name
+session.removeTools(["get_weather"]); // [!code highlight]
+
+// Replace all tools
+session.setTools([calculate, searchDocs]); // [!code highlight]
+```
+
+| Method | Description |
+| --- | --- |
+| `addTools(tools)` | Append tools to the session's agent |
+| `removeTools(names)` | Remove tools by name |
+| `setTools(tools)` | Replace all tools on the session's agent |
+
+<Callout type="warn">
+Tool management methods throw if the session is closed or currently streaming. Modify tools between `stream()` calls, not during one.
+</Callout>
 
 ## Persistence
 

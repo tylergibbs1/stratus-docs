@@ -169,6 +169,9 @@ console.log(result.output); // "4"
 | `toolInputGuardrails` | `ToolInputGuardrail[]` | `undefined` | [Tool guardrails](/guardrails#tool-guardrails) that run before tool execution |
 | `toolOutputGuardrails` | `ToolOutputGuardrail[]` | `undefined` | [Tool guardrails](/guardrails#tool-guardrails) that run after tool execution |
 | `resetToolChoice` | `boolean` | `undefined` | Reset `toolChoice` to `"auto"` after the first LLM call to prevent infinite loops |
+| `allowedTools` | `string[]` | `undefined` | Restrict which tools are available. Supports glob wildcards (e.g. `"mcp__github__*"`). See [Allowed tools](#allowed-tools). |
+| `canUseTool` | `CanUseTool` | `undefined` | Permission callback invoked before any tool executes. See [Tool permissions](#tool-permissions). |
+| `dynamicSubagents` | `SubAgent[]` | `undefined` | Additional subagents available at runtime beyond those defined on the agent |
 
 ```ts title="options.ts"
 const ac = new AbortController();
@@ -242,6 +245,88 @@ await run(agent, "What's the weather?", {
   resetToolChoice: true, // [!code highlight]
 });
 ```
+
+### allowedTools
+
+Restrict which tools the agent can use for a specific run. Supports exact names and glob-style wildcards with a trailing `*`:
+
+```ts title="allowed-tools.ts"
+// Only allow MCP GitHub tools
+await run(agent, "Search for issues", {
+  allowedTools: ["mcp__github__*"], // [!code highlight]
+});
+
+// Allow specific tools by name
+await run(agent, "Get weather and calculate", {
+  allowedTools: ["get_weather", "calculate"], // [!code highlight]
+});
+
+// Empty array = no tools (agent responds with text only)
+await run(agent, "Hello", {
+  allowedTools: [], // [!code highlight]
+});
+```
+
+`allowedTools` filters tools, handoffs, and subagents. Only items whose names match at least one pattern are included in the request sent to the model.
+
+### canUseTool
+
+A centralized permission callback invoked before any tool executes. Return `{ behavior: "allow" }` to proceed or `{ behavior: "deny", message }` to block. The deny message is sent to the model so it can adjust its approach.
+
+```ts title="can-use-tool.ts"
+import type { CanUseTool } from "@usestratus/sdk/core";
+
+const canUseTool: CanUseTool = async (toolName, input, context) => {
+  // Ask the user for permission
+  const approved = await promptUser(`Allow ${toolName}?`);
+
+  if (!approved) {
+    return { behavior: "deny", message: "User rejected this action" }; // [!code highlight]
+  }
+
+  return { behavior: "allow" }; // [!code highlight]
+};
+
+await run(agent, "Delete the file", { canUseTool });
+```
+
+You can also modify the tool's input before it executes:
+
+```ts title="modify-input.ts"
+const canUseTool: CanUseTool = async (toolName, input) => ({
+  behavior: "allow",
+  updatedInput: { ...input, safe_mode: true }, // [!code highlight]
+});
+```
+
+<Callout type="info">
+`canUseTool` takes precedence over per-tool `needsApproval`. If `canUseTool` denies a tool that has `needsApproval: true`, the run will **not** be interrupted — it will be denied immediately.
+</Callout>
+
+### interrupt()
+
+`stream()` returns an `interrupt()` function for gracefully stopping a run. Unlike `AbortSignal` (which throws), `interrupt()` lets the current model call or tool execution finish, then returns a partial `RunResult`.
+
+```ts title="interrupt.ts"
+const { stream: s, result, interrupt } = stream(agent, "Do a complex task", { // [!code highlight]
+  maxTurns: 20,
+});
+
+for await (const event of s) {
+  if (event.type === "done") {
+    if (shouldStop()) {
+      interrupt(); // [!code highlight]
+    }
+  }
+}
+
+const r = await result; // Resolves normally with partial result
+console.log(r.numTurns); // Number of turns completed before interrupt
+```
+
+<Callout type="info">
+`interrupt()` is checked between turns. If called during a model call, the current call finishes before the run stops. Calling `interrupt()` multiple times is safe and idempotent.
+</Callout>
 
 ## Passing input
 
