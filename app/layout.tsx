@@ -3,6 +3,7 @@ import { RootProvider } from "fumadocs-ui/provider/next";
 import { DocsLayout } from "fumadocs-ui/layouts/docs";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import type { ReactNode } from "react";
+import { Analytics } from "@vercel/analytics/next";
 import { source } from "@/lib/source";
 import { baseOptions } from "@/app/layout.config";
 
@@ -33,6 +34,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 						{children}
 					</DocsLayout>
 				</RootProvider>
+				<Analytics />
 			</body>
 		</html>
 	);
