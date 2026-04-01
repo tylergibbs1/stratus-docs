@@ -2,6 +2,7 @@ import "./global.css";
 import { RootProvider } from "fumadocs-ui/provider/next";
 import { DocsLayout } from "fumadocs-ui/layouts/docs";
 import { Inter, JetBrains_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { Analytics } from "@vercel/analytics/next";
 import { source } from "@/lib/source";
@@ -17,12 +18,43 @@ const jetbrainsMono = JetBrains_Mono({
 	variable: "--font-jetbrains",
 });
 
-export const metadata = {
+export const viewport: Viewport = {
+	width: "device-width",
+	initialScale: 1,
+	maximumScale: 5,
+	userScalable: true,
+	themeColor: [
+		{ media: "(prefers-color-scheme: light)", color: "#ffffff" },
+		{ media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
+	],
+};
+
+export const metadata: Metadata = {
+	metadataBase: new URL("https://usestratus.dev"),
 	title: {
 		template: "%s | Stratus SDK",
-		default: "Stratus SDK",
+		default: "Stratus SDK - TypeScript Agent SDK for Azure OpenAI",
 	},
-	description: "TypeScript agent SDK for Azure OpenAI",
+	description:
+		"Build AI agents with TypeScript using Azure OpenAI. Stratus SDK provides tools, handoffs, sessions, streaming, and more.",
+	openGraph: {
+		type: "website",
+		locale: "en_US",
+		url: "https://usestratus.dev",
+		siteName: "Stratus SDK",
+		title: "Stratus SDK - TypeScript Agent SDK for Azure OpenAI",
+		description:
+			"Build AI agents with TypeScript using Azure OpenAI. Stratus SDK provides tools, handoffs, sessions, streaming, and more.",
+	},
+	twitter: {
+		card: "summary_large_image",
+		title: "Stratus SDK",
+		description:
+			"Build AI agents with TypeScript using Azure OpenAI. Stratus SDK provides tools, handoffs, sessions, streaming, and more.",
+	},
+	alternates: {
+		canonical: "/",
+	},
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
