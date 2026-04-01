@@ -8,6 +8,7 @@ import {
 import { notFound } from "next/navigation";
 import { getMDXComponents } from "@/mdx-components";
 import { LLMCopyButton } from "@/components/llm-copy-button";
+import { JsonLd } from "@/components/json-ld";
 import { getGithubLastEdit } from "fumadocs-core/content/github";
 
 const GITHUB_OWNER = "tylergibbs1";
@@ -28,7 +29,30 @@ export default async function Page(props: {
 		path: `content/docs/${page.path}`,
 	});
 
+	const breadcrumbItems = [
+		{
+			"@type": "ListItem" as const,
+			position: 1,
+			name: "Home",
+			item: "https://usestratus.dev",
+		},
+		...(params.slug ?? []).map((segment, i, arr) => ({
+			"@type": "ListItem" as const,
+			position: i + 2,
+			name: i === arr.length - 1 ? page.data.title : segment,
+			item: `https://usestratus.dev/${arr.slice(0, i + 1).join("/")}`,
+		})),
+	];
+
 	return (
+		<>
+		<JsonLd
+			data={{
+				"@context": "https://schema.org",
+				"@type": "BreadcrumbList",
+				itemListElement: breadcrumbItems,
+			}}
+		/>
 		<DocsPage
 			toc={page.data.toc}
 			full={page.data.full}
@@ -48,6 +72,7 @@ export default async function Page(props: {
 				<MDX components={getMDXComponents()} />
 			</DocsBody>
 		</DocsPage>
+		</>
 	);
 }
 

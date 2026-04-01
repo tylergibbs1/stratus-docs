@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import { Analytics } from "@vercel/analytics/next";
 import { source } from "@/lib/source";
 import { baseOptions } from "@/app/layout.config";
+import { JsonLd } from "@/components/json-ld";
 
 const inter = Inter({
 	subsets: ["latin"],
@@ -61,6 +62,36 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 	return (
 		<html lang="en" suppressHydrationWarning>
 			<body className={`${inter.variable} ${jetbrainsMono.variable}`}>
+				<JsonLd
+					data={{
+						"@context": "https://schema.org",
+						"@type": "WebSite",
+						name: "Stratus SDK",
+						url: "https://usestratus.dev",
+						description:
+							"Build AI agents with TypeScript using Azure OpenAI. Stratus SDK provides tools, handoffs, sessions, streaming, and more.",
+						inLanguage: "en",
+						publisher: {
+							"@type": "Organization",
+							name: "Stratus",
+							url: "https://github.com/tylergibbs1/stratus",
+						},
+					}}
+				/>
+				<JsonLd
+					data={{
+						"@context": "https://schema.org",
+						"@type": "SoftwareSourceCode",
+						name: "Stratus SDK",
+						url: "https://usestratus.dev",
+						codeRepository:
+							"https://github.com/tylergibbs1/stratus",
+						programmingLanguage: "TypeScript",
+						runtimePlatform: "Node.js",
+						description:
+							"TypeScript agent SDK for Azure OpenAI",
+					}}
+				/>
 				<RootProvider>
 					<DocsLayout tree={source.pageTree} {...baseOptions}>
 						{children}
