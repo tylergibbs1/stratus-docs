@@ -10,6 +10,42 @@ Stratus includes two built-in Azure OpenAI model implementations. Both implement
 | `AzureResponsesModel` | Responses API | **Recommended.** Latest API format with full feature support |
 | `AzureChatCompletionsModel` | Chat Completions | Legacy support, widest compatibility |
 
+## Quick Start with `createModel()`
+
+The fastest way to get started. Reads `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, and `AZURE_OPENAI_DEPLOYMENT` from environment variables:
+
+```ts title="quick-start.ts"
+import { createModel } from "@usestratus/sdk/azure";
+
+const model = createModel(); // [!code highlight]
+```
+
+Defaults to the Responses API. Pass `"chat-completions"` for the legacy API:
+
+```ts
+const model = createModel("chat-completions");
+```
+
+Override any env var with explicit options:
+
+```ts
+const model = createModel({
+  endpoint: "https://my-resource.openai.azure.com",
+  deployment: "gpt-5.2",
+  apiKey: process.env.MY_KEY!,
+  store: true,
+});
+```
+
+| Env Variable | Fallback | Description |
+| --- | --- | --- |
+| `AZURE_OPENAI_ENDPOINT` | `options.endpoint` | Azure OpenAI endpoint URL |
+| `AZURE_OPENAI_API_KEY` | `options.apiKey` | API key (or use `options.azureAdTokenProvider`) |
+| `AZURE_OPENAI_DEPLOYMENT` | `options.deployment` | Model deployment name |
+| `AZURE_OPENAI_API_VERSION` | `options.apiVersion` | API version (optional) |
+
+If a required value is missing, `createModel()` throws a `StratusError` with a message telling you exactly which env var to set.
+
 ## AzureResponsesModel
 
 The recommended model for new projects. Uses the Azure Responses API.

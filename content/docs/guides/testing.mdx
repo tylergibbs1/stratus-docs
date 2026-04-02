@@ -1,0 +1,142 @@
+---
+title: Testing
+description: Test agents with mock models and response builders
+---
+
+Stratus ships test utilities as a separate entrypoint so they stay out of production bundles.
+
+```bash tab="bun"
+import { createMockModel, textResponse, toolCallResponse } from "@usestratus/sdk/testing";
+```
+
+## Mock Model
+
+`createMockModel()` returns a `Model` that serves canned responses in sequence:
+
+```ts title="basic-mock.ts"
+import { createMockModel, textResponse } from "@usestratus/sdk/testing";
+import { Agent, run } from "@usestratus/sdk/core";
+
+const model = createMockModel([
+  textResponse("Hello!"),
+  textResponse("Goodbye!"),
+]);
+
+const agent = new Agent({ name: "test", model });
+
+const result = await run(agent, "Hi");
+expect(result.output).toBe("Hello!");
+```
+
+When responses are exhausted, the mock throws with a clear message including how many calls were made.
+
+### Capturing Requests
+
+Pass `{ capture: true }` to record every `ModelRequest` the mock receives:
+
+```ts title="capture.ts"
+const model = createMockModel(
+  [textResponse("ok")],
+  { capture: true }, // [!code highlight]
+);
+
+await run(agent, "Hello");
+
+expect(model.requests).toHaveLength(1);
+expect(model.requests[0].messages[0].content).toBe("Hello");
+```
+
+## Response Builders
+
+### `textResponse(content, options?)`
+
+Builds a `ModelResponse` with text content and no tool calls.
+
+```ts
+textResponse("Hello world")
+// { content: "Hello world", toolCalls: [], finishReason: "stop" }
+
+textResponse("ok", {
+  usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+  responseId: "resp_123",
+})
+```
+
+### `toolCallResponse(calls, options?)`
+
+Builds a `ModelResponse` with tool calls. Each call needs a `name` and `args` object:
+
+```ts
+toolCallResponse([
+  { name: "search", args: { query: "test" } },
+  { name: "save", args: { key: "result", value: "42" } },
+])
+// toolCalls: [{ id: "tc_0", ... }, { id: "tc_1", ... }]
+// finishReason: "tool_calls"
+```
+
+Custom IDs:
+
+```ts
+toolCallResponse([
+  { name: "search", args: { query: "test" }, id: "call_abc" },
+])
+```
+
+## Testing Tool Calls
+
+Mock a multi-turn conversation where the agent calls a tool and gets a follow-up response:
+
+```ts title="tool-test.ts"
+import { z } from "zod";
+import { Agent, run, tool } from "@usestratus/sdk/core";
+import { createMockModel, textResponse, toolCallResponse } from "@usestratus/sdk/testing";
+
+const add = tool({
+  name: "add",
+  description: "Add two numbers",
+  parameters: z.object({ a: z.number(), b: z.number() }),
+  execute: async (_ctx, { a, b }) => String(a + b),
+});
+
+const model = createMockModel([
+  toolCallResponse([{ name: "add", args: { a: 2, b: 3 } }]), // LLM calls tool
+  textResponse("The answer is 5"),                             // LLM responds with result
+]);
+
+const agent = new Agent({ name: "calc", model, tools: [add] });
+const result = await run(agent, "What is 2 + 3?");
+
+expect(result.output).toBe("The answer is 5");
+```
+
+## Testing with Streaming
+
+The mock model supports `getStreamedResponse` — it yields `content_delta`, `tool_call_start/delta/done`, and `done` events matching the real API shape:
+
+```ts title="stream-test.ts"
+import { Agent, stream } from "@usestratus/sdk/core";
+import { createMockModel, textResponse } from "@usestratus/sdk/testing";
+
+const model = createMockModel([textResponse("Streamed!")]);
+const agent = new Agent({ name: "test", model });
+
+const { stream: s, result } = stream(agent, "Hi");
+const deltas: string[] = [];
+for await (const event of s) {
+  if (event.type === "content_delta") deltas.push(event.content);
+}
+
+expect(deltas).toEqual(["Streamed!"]);
+expect((await result).output).toBe("Streamed!");
+```
+
+## Debug Mode
+
+Enable `{ debug: true }` on `run()`, `stream()`, or `createSession()` to log model calls, tool executions, and handoffs to stderr:
+
+```ts title="debug.ts"
+const result = await run(agent, "Hello", { debug: true }); // [!code highlight]
+```
+
+Output goes to `process.stderr` with `[stratus:model]`, `[stratus:tool]`, and `[stratus:handoff]` prefixes. No-op when disabled — zero overhead in production.
