@@ -159,10 +159,13 @@ interface ModelRequest {
   modelSettings?: ModelSettings;
   responseFormat?: ResponseFormat;
   previousResponseId?: string; // [!code highlight]
+  rawInputItems?: Record<string, unknown>[]; // [!code highlight]
 }
 ```
 
 The `tools` array accepts both `ToolDefinition` (function tools) and `Record<string, unknown>` (hosted tool definitions). `previousResponseId` is forwarded by the run loop for Responses API optimization when `store` is enabled.
+
+`rawInputItems` appends raw items to the Responses API input array. Use this to pass back opaque items from the API — compaction items, encrypted reasoning, MCP approval responses — that the SDK doesn't serialize from `ChatMessage`.
 
 ### ModelResponse
 
@@ -342,3 +345,151 @@ As a safety net, `getResponse()` also catches `SyntaxError` from `response.json(
 <Callout type="info">
 `AzureResponsesModel` also retries SSE-level rate limits — when the HTTP response is 200 but the stream contains a `too_many_requests` error event before any content has been yielded. SSE retries use a fixed budget of 3, independent of `maxRetries`, to avoid quadratic retry multiplication.
 </Callout>
+
+## Responses API Methods
+
+`AzureResponsesModel` exposes additional methods beyond the `Model` interface for Responses API features that don't fit the standard `getResponse` / `getStreamedResponse` pattern.
+
+### Compact endpoint
+
+Shrink a conversation's context window while preserving essential information. Useful for long-running sessions before continuing.
+
+```ts title="compact.ts"
+// Compact by passing conversation items
+const compacted = await model.compact({
+  input: [
+    { role: "user", content: "Explain quantum computing in detail." },
+    {
+      type: "message",
+      role: "assistant",
+      content: [{ type: "output_text", text: longResponse }],
+    },
+  ],
+});
+
+// Use compacted output as context for the next request
+const followUp = await model.getResponse({
+  messages: [{ role: "user", content: "What are the practical applications?" }],
+  rawInputItems: compacted.output, // [!code highlight]
+});
+```
+
+You can also compact by referencing a stored response:
+
+```ts title="compact-by-id.ts"
+const compacted = await model.compact({
+  previousResponseId: "resp_abc123", // [!code highlight]
+});
+```
+
+**CompactOptions:**
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `model` | `string` | Model override. Defaults to the deployment configured on the model instance. |
+| `input` | `Record<string, unknown>[]` | Conversation items to compact. |
+| `previousResponseId` | `string` | ID of a stored response to compact. Alternative to `input`. |
+| `signal` | `AbortSignal` | Abort signal for cancellation. |
+
+### Background tasks
+
+Run long-running requests asynchronously. Best for reasoning models (o3, o4-mini) that can take minutes to complete.
+
+```ts title="background.ts"
+// Start a background task
+const bg = await model.createBackgroundResponse({
+  messages: [
+    { role: "user", content: "Write a detailed analysis of this codebase." },
+  ],
+});
+
+console.log(bg.id);     // "resp_abc123"
+console.log(bg.status); // "queued" | "in_progress"
+
+// Poll until done
+let response = bg;
+while (response.status !== "completed" && response.status !== "failed") {
+  await new Promise((r) => setTimeout(r, 2000));
+  response = await model.retrieveResponse(response.id);
+}
+
+console.log(response.output); // completed response
+```
+
+Cancel a running background task:
+
+```ts title="cancel.ts"
+const cancelled = await model.cancelResponse("resp_abc123");
+```
+
+Resume streaming from a specific point (useful for dropped connections):
+
+```ts title="resume-stream.ts"
+let cursor: number | undefined;
+
+for await (const event of model.streamBackgroundResponse("resp_abc123", {
+  startingAfter: cursor, // resume from last known position
+})) {
+  // process events
+}
+```
+
+<Callout type="info">
+Background mode requires `store: true`. Not all deployments support it — it's designed for reasoning models like o3 and o4-mini.
+</Callout>
+
+### Retrieve, delete, and list
+
+Manage stored responses directly.
+
+```ts title="crud.ts"
+// Retrieve a stored response
+const response = await model.retrieveResponse("resp_abc123");
+
+// List the input items that were sent
+const items = await model.listInputItems("resp_abc123");
+console.log(items.data);    // input item objects
+console.log(items.hasMore); // pagination
+
+// Delete a stored response
+await model.deleteResponse("resp_abc123");
+```
+
+**retrieveResponse(id)** — Returns the full `RawResponse` including `id`, `status`, `output`, `usage`, and `error`.
+
+**listInputItems(id)** — Returns `{ data, hasMore, firstId, lastId }` with the input items from the original request.
+
+**deleteResponse(id)** — Deletes the stored response. Subsequent retrieval returns 404.
+
+<Callout type="info">
+Stored responses are retained for 30 days by default. Use `deleteResponse()` to clean up earlier.
+</Callout>
+
+### MCP approval flow
+
+When using the [MCP built-in tool](/built-in-tools#mcp-model-context-protocol) with `requireApproval`, the API returns an `mcp_approval_request` in `outputItems` instead of executing the tool. You approve or deny it by passing an `mcp_approval_response` back.
+
+```ts title="mcp-approval.ts"
+const result = await model.getResponse({
+  messages: [{ role: "user", content: "Search the docs" }],
+});
+
+// Check for pending approvals
+const approval = result.outputItems?.find(
+  (item) => item.type === "mcp_approval_request"
+);
+
+if (approval) {
+  // Approve and continue
+  const continued = await model.getResponse({
+    messages: [{ role: "user", content: "Search the docs" }],
+    previousResponseId: result.responseId,
+    modelSettings: { store: true },
+    rawInputItems: [{ // [!code highlight]
+      type: "mcp_approval_response", // [!code highlight]
+      approve: true, // [!code highlight]
+      approval_request_id: approval.id as string, // [!code highlight]
+    }], // [!code highlight]
+  });
+}
+```

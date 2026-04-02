@@ -58,6 +58,8 @@ const creativeAgent = agent.clone({
 | `audio` | `AudioConfig` | `undefined` | Audio voice and format config. Requires `modalities: ["text", "audio"]`. Chat Completions only. |
 | `dataSources` | `DataSource[]` | `undefined` | Azure On Your Data sources for RAG. Chat Completions only. See [Data sources](#data-sources). |
 | `contextManagement` | `ContextManagement` | `undefined` | Server-side context compaction rules. Responses API only. See [Context compaction](#context-compaction). |
+| `include` | `string[]` | `undefined` | Fields to include in the response. Responses API only. See [Encrypted reasoning](#encrypted-reasoning). |
+| `background` | `boolean` | `undefined` | Run as a background task for long-running requests. Responses API only. See [Background tasks](/azure#background-tasks). |
 
 ## Reasoning models
 
@@ -356,6 +358,49 @@ const agent = new Agent({
 Data sources are only supported with the Chat Completions API (`AzureChatCompletionsModel`). See the [Azure On Your Data documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/use-your-data) for the full schema.
 </Callout>
 
+## Encrypted reasoning
+
+When using reasoning models (o3, o4-mini) in stateless mode (`store: false`), you need to preserve reasoning context across conversation turns. Set `include` to receive encrypted reasoning items that can be passed back in the next request.
+
+```ts title="encrypted-reasoning.ts"
+const model = new AzureResponsesModel({
+  endpoint: process.env.AZURE_OPENAI_ENDPOINT!,
+  apiKey: process.env.AZURE_OPENAI_API_KEY!,
+  deployment: "o4-mini",
+  store: false,
+});
+
+// First turn: request encrypted reasoning
+const response = await model.getResponse({
+  messages: [{ role: "user", content: "Solve this step by step: 15 * 23 + 7" }],
+  modelSettings: {
+    reasoningEffort: "medium",
+    include: ["reasoning.encrypted_content"], // [!code highlight]
+  },
+});
+
+// Extract reasoning items from output
+const reasoningItems = response.outputItems?.filter(
+  (item) => item.type === "reasoning"
+) ?? [];
+
+// Second turn: pass reasoning back to preserve context
+const followUp = await model.getResponse({
+  messages: [{ role: "user", content: "Now divide that result by 4" }],
+  rawInputItems: reasoningItems, // [!code highlight]
+  modelSettings: {
+    reasoningEffort: "medium",
+    include: ["reasoning.encrypted_content"],
+  },
+});
+```
+
+The encrypted reasoning items are opaque — they can't be read or modified, only passed back to the API. This allows the model to maintain its reasoning chain across turns without server-side storage.
+
+<Callout type="info">
+Encrypted reasoning is only supported with the Responses API (`AzureResponsesModel`) and reasoning models. The `include` parameter is ignored by non-reasoning models.
+</Callout>
+
 ## Context compaction
 
 For long-running sessions on the Responses API, server-side context compaction shrinks the context window while preserving essential information.
@@ -373,7 +418,30 @@ const agent = new Agent({
 });
 ```
 
-When the output token count crosses `compact_threshold`, the API automatically compacts the context and emits a compaction item. On subsequent turns the compaction item carries forward essential context using fewer tokens.
+When the output token count crosses `compact_threshold`, the API automatically compacts the context and emits a compaction item in `outputItems`. On subsequent turns the compaction item carries forward essential context using fewer tokens.
+
+You can pass compaction items back in follow-up requests via `rawInputItems`:
+
+```ts title="compaction-round-trip.ts"
+const result = await model.getResponse({
+  messages: [{ role: "user", content: "Continue the conversation" }],
+  modelSettings: {
+    contextManagement: [{ type: "compaction", compact_threshold: 200000 }],
+  },
+});
+
+// If compaction occurred, pass the item back in the next request
+const compactionItems = result.outputItems?.filter(
+  (item) => item.type === "compaction"
+) ?? [];
+
+const followUp = await model.getResponse({
+  messages: [{ role: "user", content: "What were we talking about?" }],
+  rawInputItems: compactionItems, // [!code highlight]
+});
+```
+
+For explicit compaction (outside of automatic `context_management`), use the [`compact()` method](/azure#compact-endpoint) on `AzureResponsesModel`.
 
 <Callout type="info">
 Context compaction is only supported with the Responses API (`AzureResponsesModel`).
