@@ -156,3 +156,22 @@ const spanishAgent = agent.clone({
 <Callout type="info">
 All properties not in the override are preserved from the original, including tools, subagents, hooks, guardrails, and handoffs.
 </Callout>
+
+## Validation
+
+Agents are validated at construction time. The constructor throws a `StratusError` if:
+
+- **Duplicate tool names** — two tools with the same name would silently conflict at runtime
+- **Invalid timeout** — `timeout: 0` or negative values on tools
+
+Empty tool descriptions produce a `console.warn` but don't throw.
+
+For programmatic validation (e.g. in tests), use `validateAgent()`:
+
+```ts title="validate.ts"
+import { validateAgent } from "@usestratus/sdk/core";
+
+const result = validateAgent(agent);
+console.log(result.errors);   // string[] — fatal issues
+console.log(result.warnings); // string[] — non-fatal issues
+```

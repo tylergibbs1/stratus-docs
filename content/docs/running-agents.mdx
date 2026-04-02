@@ -172,6 +172,7 @@ console.log(result.output); // "4"
 | `allowedTools` | `string[]` | `undefined` | Restrict which tools are available. Supports glob wildcards (e.g. `"mcp__github__*"`). See [Allowed tools](#allowed-tools). |
 | `canUseTool` | `CanUseTool` | `undefined` | Permission callback invoked before any tool executes. See [Tool permissions](#tool-permissions). |
 | `dynamicSubagents` | `SubAgent[]` | `undefined` | Additional subagents available at runtime beyond those defined on the agent |
+| `debug` | `boolean` | `false` | Log model calls, tool executions, and handoffs to stderr. See [Testing](/guides/testing#debug-mode). |
 
 ```ts title="options.ts"
 const ac = new AbortController();

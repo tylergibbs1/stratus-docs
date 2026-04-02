@@ -97,6 +97,18 @@ The `prompt()` function also accepts `ContentPart[]`:
 const result = await prompt(parts, { model });
 ```
 
+## Wait for Result
+
+If you don't need streaming events, `wait()` drains the stream internally and returns the result directly:
+
+```ts title="wait.ts"
+session.send("What's the weather in NYC?");
+const result = await session.wait(); // [!code highlight]
+console.log(result.output);
+```
+
+This is equivalent to draining the stream manually, but eliminates the boilerplate. All hooks, guardrails, and persistence still fire as usual.
+
 ## Accessing Results
 
 After consuming the stream, access the result via `session.result`:
