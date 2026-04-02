@@ -1,18 +1,19 @@
 ---
 title: Introduction
-description: A better TypeScript agent SDK for Azure OpenAI
+description: TypeScript agent SDK purpose-built for Azure OpenAI
 ---
 
-Stratus is a better TypeScript agent SDK for Azure OpenAI.
+Stratus is a TypeScript agent SDK purpose-built for Azure OpenAI.
 
-You get agents, tools, multi-turn sessions, streaming, handoffs, guardrails, and tracing. One `run()` call handles the entire tool loop. The types are strict. The API is small.
+One `run()` call handles the entire tool loop. The types are strict. The API is small.
 
-- **Built for Azure, not bolted on** — auto-endpoint detection, Entra ID auth, [content filter errors](/errors) as typed exceptions, and built-in retry. No 404 config spirals, no "which SDK do I use" confusion.
-- **Two API backends, one interface** — [Chat Completions and Responses API](/azure) through the same agent, tool, and session code. Start with one, switch with a single line.
-- **Multi-agent orchestration** — [handoffs](/handoffs), [subagents](/subagents), [guardrails](/guardrails), and [hooks](/hooks) compose through a single run loop. Hooks can deny or modify tool calls at runtime.
-- **Client-side state you control** — [save, resume, and fork](/sessions) conversations as portable JSON snapshots. No server-side threads, no opaque session IDs.
-- **Type-safe from schema to output** — Zod schemas drive [tool parameters](/tools), [structured output](/structured-output), and validation. Context types flow through agents, hooks, and guardrails at compile time.
-- **Zero dependencies** — only Zod as a peer dep. No transitive dependency sprawl, no framework lock-in.
+- **One line to start** — [`createModel()`](/azure#quick-start-with-createmodel) reads your env vars. No config objects, no API version guessing.
+- **One interface, two backends** — [Chat Completions and Responses API](/azure) through the same agent, tool, and session code.
+- **Agents that compose** — [handoffs](/handoffs), [subagents](/subagents), [guardrails](/guardrails), and [hooks](/hooks) in a single run loop. Deny or modify tool calls at runtime.
+- **Human-in-the-loop** — [permission callbacks](/running-agents#tool-permissions), per-tool approval, glob-filtered tools, and graceful mid-run [interrupts](/abort-signal).
+- **State you own** — [save, resume, and fork](/sessions) conversations as JSON. No server-side threads.
+- **Type-safe end to end** — Zod schemas drive [tool parameters](/tools), [structured output](/structured-output), and validation. Types flow through agents, hooks, and guardrails at compile time.
+- **Zero dep** — only Zod as a peer dep.
 
 ## Why this exists
 
@@ -34,6 +35,8 @@ And these are things other agent SDKs don't do at all:
 - **Todo tracking.** Agents report structured progress in real-time via [`TodoList`](/todo-tracking). Your UI updates as they work, not after.
 - **Session fork.** [Branch a conversation](/sessions) with one call. Try a different strategy without losing the original.
 - **Typed context end-to-end.** One [context type](/agents#context) flows through tools, hooks, guardrails, and subagents. TypeScript generics, not `any`.
+- **Test utilities built in.** [`createMockModel()`](/guides/testing) and response builders ship as `@usestratus/sdk/testing`. No reverse-engineering the mock pattern.
+- **Debug mode.** [`{ debug: true }`](/guides/testing#debug-mode) logs model calls, tool executions, and handoffs to stderr. Zero overhead when off.
 
 ## Features
 
@@ -79,15 +82,10 @@ And these are things other agent SDKs don't do at all:
 ## Quick Example
 
 ```ts title="weather-agent.ts"
-import { AzureResponsesModel } from "@usestratus/sdk";
-import { createSession, tool } from "@usestratus/sdk/core";
+import { createModel, createSession, tool } from "@usestratus/sdk";
 import { z } from "zod";
 
-const model = new AzureResponsesModel({
-  endpoint: process.env.AZURE_ENDPOINT!,
-  apiKey: process.env.AZURE_API_KEY!,
-  deployment: "gpt-5.2",
-});
+const model = createModel(); // reads AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, AZURE_OPENAI_DEPLOYMENT
 
 const getWeather = tool({
   name: "get_weather",
@@ -109,19 +107,20 @@ for await (const event of session.stream()) {
 
 // Multi-turn: context persists automatically
 session.send("What about London?");
-for await (const event of session.stream()) {
-  if (event.type === "content_delta") process.stdout.write(event.content);
-}
+const result = await session.wait(); // no need to drain the stream manually
+console.log(result.output);
 ```
 
 ## Architecture
 
 Stratus is organized into two layers:
 
-| Package | Description |
+| Import path | Description |
 | --- | --- |
-| `stratus/core` | Provider-agnostic: Agent, Session, run loop, tools, handoffs, guardrails, hooks, tracing |
-| `stratus` | Re-exports core + Azure OpenAI implementation |
+| `@usestratus/sdk` | Re-exports core + Azure OpenAI implementation |
+| `@usestratus/sdk/core` | Provider-agnostic: Agent, Session, run loop, tools, handoffs, guardrails, hooks, tracing |
+| `@usestratus/sdk/azure` | Azure models + `createModel()` factory |
+| `@usestratus/sdk/testing` | Mock model, response builders — keep out of production bundles |
 
 The core layer defines the `Model` interface. Azure is the built-in implementation, but you can plug in any provider by implementing `Model`.
 
@@ -162,6 +161,8 @@ End-to-end examples showing how to combine features into real agents:
       <File name="handoff.ts" />
       <File name="hooks.ts" />
       <File name="guardrails.ts" />
+      <File name="validate-agent.ts" />
+      <File name="debug.ts" />
       <File name="tracing.ts" />
       <File name="cost.ts" />
       <File name="types.ts" />
@@ -169,9 +170,14 @@ End-to-end examples showing how to combine features into real agents:
       <File name="errors.ts" />
     </Folder>
     <Folder name="azure">
+      <File name="create-model.ts" />
       <File name="chat-completions-model.ts" />
       <File name="responses-model.ts" />
       <File name="sse-parser.ts" />
+    </Folder>
+    <Folder name="testing">
+      <File name="mock-model.ts" />
+      <File name="response-builders.ts" />
     </Folder>
   </Folder>
 </Files>
