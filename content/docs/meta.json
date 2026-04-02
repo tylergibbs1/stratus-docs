@@ -34,6 +34,7 @@
 		"custom-models",
 		"guides",
 		"---Reference---",
-		"llm-knowledge-base"
+		"llm-knowledge-base",
+		"changelog"
 	]
 }

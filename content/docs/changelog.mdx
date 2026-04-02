@@ -1,0 +1,202 @@
+---
+title: Changelog
+description: Release history for @usestratus/sdk
+---
+
+## v1.5.0
+
+**DX improvements: testing, createModel, validation, debug mode**
+
+### New: `@usestratus/sdk/testing` entrypoint
+
+Ship test utilities as a separate import so they stay out of production bundles.
+
+```ts
+import { createMockModel, textResponse, toolCallResponse } from "@usestratus/sdk/testing";
+
+const model = createMockModel([
+  toolCallResponse([{ name: "search", args: { q: "test" } }]),
+  textResponse("Found 3 results"),
+]);
+
+const agent = new Agent({ name: "test", model, tools: [searchTool] });
+const result = await run(agent, "Search for test");
+```
+
+`createMockModel` accepts `{ capture: true }` to record every `ModelRequest` for assertions.
+
+### New: `createModel()` factory
+
+Reads `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, and `AZURE_OPENAI_DEPLOYMENT` from environment variables. Throws a `StratusError` with a specific message when a required value is missing.
+
+```ts
+import { createModel } from "@usestratus/sdk/azure";
+
+const model = createModel();                   // Responses API (default)
+const model = createModel("chat-completions"); // explicit backend
+```
+
+### New: `session.wait()`
+
+One-call convenience that drains the stream and returns the result:
+
+```ts
+session.send("What's the weather?");
+const result = await session.wait();
+```
+
+### New: Agent construction validation
+
+The `Agent` constructor now validates tools at construction time:
+- **Duplicate tool names** throw `StratusError`
+- **`timeout <= 0`** throws `StratusError`
+- **Empty description** logs a `console.warn`
+
+Use `validateAgent(agent)` for programmatic access to `{ errors, warnings }`.
+
+### New: `{ debug: true }` mode
+
+Log model calls, tool executions, and handoffs to stderr:
+
+```ts
+await run(agent, "Hello", { debug: true });
+// [stratus:model] 2026-04-02T... request to assistant {"messages":2,"tools":1}
+// [stratus:model] 2026-04-02T... response from assistant {"content":"Hi!"}
+```
+
+Also works on sessions: `createSession({ model, debug: true })`.
+
+---
+
+## v1.4.0
+
+**Azure Responses API: compact, background tasks, CRUD, encrypted reasoning, MCP approval**
+
+### New: Compact endpoint
+
+Shrink a conversation's context window while preserving essential information:
+
+```ts
+const compacted = await model.compact({
+  input: conversationItems,
+});
+const followUp = await model.getResponse({
+  messages: [{ role: "user", content: "Continue" }],
+  rawInputItems: compacted.output,
+});
+```
+
+Also supports `compact({ previousResponseId: "resp_..." })`.
+
+### New: Background tasks
+
+Run long-running requests asynchronously (designed for reasoning models like o3):
+
+```ts
+const bg = await model.createBackgroundResponse({ messages });
+// Poll until done
+let response = bg;
+while (response.status !== "completed") {
+  await new Promise((r) => setTimeout(r, 2000));
+  response = await model.retrieveResponse(response.id);
+}
+```
+
+Cancel with `model.cancelResponse(id)`. Resume streaming with `model.streamBackgroundResponse(id, { startingAfter })`.
+
+### New: Retrieve, delete, list stored responses
+
+```ts
+const response = await model.retrieveResponse("resp_abc123");
+const items = await model.listInputItems("resp_abc123");
+await model.deleteResponse("resp_abc123");
+```
+
+### New: Encrypted reasoning items
+
+Preserve reasoning context across turns in stateless mode:
+
+```ts
+const result = await model.getResponse({
+  messages: [{ role: "user", content: "Solve this" }],
+  modelSettings: { include: ["reasoning.encrypted_content"] },
+});
+// Pass reasoning items back in next turn
+const followUp = await model.getResponse({
+  messages: [{ role: "user", content: "Continue" }],
+  rawInputItems: result.outputItems?.filter((i) => i.type === "reasoning") ?? [],
+});
+```
+
+### New: MCP approval flow
+
+Submit `mcp_approval_response` via `rawInputItems` when using remote MCP tools with approval:
+
+```ts
+const continued = await model.getResponse({
+  messages,
+  previousResponseId: result.responseId,
+  rawInputItems: [{
+    type: "mcp_approval_response",
+    approve: true,
+    approval_request_id: "mcpr_123",
+  }],
+});
+```
+
+### New: `rawInputItems` on ModelRequest
+
+Append opaque items (compaction, encrypted reasoning, MCP approvals) to the Responses API input array.
+
+### New: `include` and `background` in ModelSettings
+
+- `include: string[]` — fields to include in response (e.g. `["reasoning.encrypted_content"]`)
+- `background: boolean` — run as async background task
+
+---
+
+## v1.3.0
+
+**Azure feature parity: allowedTools, canUseTool, interrupt, audio, predicted output**
+
+- `allowedTools` glob patterns on `RunOptions` to restrict available tools
+- `canUseTool` centralized permission callback
+- Graceful `interrupt()` on streaming runs
+- `prediction` (predicted output) in `ModelSettings` for Chat Completions
+- `modalities` and `audio` config for gpt-4o-audio models
+- `dataSources` for Azure On Your Data (RAG)
+
+---
+
+## v1.2.0
+
+**Phase 6: Feature parity release**
+
+- Tool timeout, isEnabled, handoff isEnabled/inputType/inputFilter
+- Run hooks (onAgentStart/End, onHandoff, onToolStart/End, onLlmStart/End)
+- Tool guardrails (input/output), guardrail results on RunResult
+- Error handlers for maxTurns, custom toolUseBehavior function
+- resetToolChoice, toolErrorFormatter, callModelInputFilter
+- fileSearchTool(), computerUseTool()
+- Hosted tool streaming events
+- `toInputList()` on RunResult
+
+---
+
+## v1.1.0
+
+**Phase 5: Hosted tools and Responses API features**
+
+- HostedTool type, AgentTool union, isHostedTool/isFunctionTool guards
+- Built-in tools: webSearchTool, codeInterpreterTool, mcpTool, imageGenerationTool
+- toolChoice fix for Responses API
+- previousResponseId/responseId tracking
+- AzureResponsesModelConfig.store
+
+---
+
+## v1.0.0
+
+**Initial release**
+
+Agent + run() + stream() + tool() + structured output + handoffs + subagents + guardrails + hooks + tracing + sessions + cost tracking + AzureResponsesModel + AzureChatCompletionsModel.
