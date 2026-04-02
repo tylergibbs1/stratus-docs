@@ -118,6 +118,12 @@ mcpTool({
 | `requireApproval` | `"always" \| "never" \| object` | Tool approval policy. Object form: `{ always: string[], never: string[] }` |
 | `headers` | `Record<string, string>` | Headers sent with requests to the MCP server |
 
+### MCP Approval Flow
+
+By default, the API requires explicit approval before sharing data with a remote MCP server. When `requireApproval` is not set to `"never"`, the model returns an `mcp_approval_request` in `outputItems` instead of calling the tool. You inspect the request and approve or deny it by passing an `mcp_approval_response` back via `rawInputItems`.
+
+See [MCP approval flow](/azure#mcp-approval-flow) for the full example.
+
 ## Image Generation
 
 Let the model generate images inline.
