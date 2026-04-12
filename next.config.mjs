@@ -6,6 +6,20 @@ const withMDX = createMDX();
 const config = {
 	reactStrictMode: true,
 	trailingSlash: false,
+	async redirects() {
+		return [
+			{
+				source: "/mcp-aws/:path*",
+				destination: "/azure",
+				permanent: true,
+			},
+			{
+				source: "/mcp-aws",
+				destination: "/azure",
+				permanent: true,
+			},
+		];
+	},
 	async rewrites() {
 		return [
 			{

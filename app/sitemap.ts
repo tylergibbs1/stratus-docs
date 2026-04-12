@@ -23,16 +23,27 @@ function getFileModTime(pageUrl: string): Date {
 }
 
 export default function sitemap(): MetadataRoute.Sitemap {
+	const corePages = new Set([
+		"/",
+		"/getting-started",
+		"/agents",
+		"/tools",
+		"/sessions",
+		"/streaming",
+		"/context",
+	]);
+
 	return source.getPages().map((page) => {
 		const lastModified = getFileModTime(page.url);
-		const isGuide = page.url.startsWith("/guides/");
 		const isHome = page.url === "/";
+		const isCore = corePages.has(page.url);
+		const isGuide = page.url.startsWith("/guides/");
 
 		return {
 			url: `${baseUrl}${page.url}`,
 			lastModified,
 			changeFrequency: isHome ? "daily" : "weekly",
-			priority: isHome ? 1.0 : isGuide ? 0.8 : 0.6,
+			priority: isHome ? 1.0 : isCore ? 0.9 : isGuide ? 0.8 : 0.7,
 		};
 	});
 }

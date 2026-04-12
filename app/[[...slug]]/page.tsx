@@ -91,7 +91,7 @@ export async function generateMetadata(props: {
 		title: page.data.title,
 		description: page.data.description,
 		alternates: {
-			canonical: page.url,
+			canonical: `https://usestratus.dev${page.url}`,
 		},
 	};
 }

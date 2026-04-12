@@ -10,6 +10,7 @@ export async function GET() {
 	return new Response(scanned.join("\n\n"), {
 		headers: {
 			"Content-Type": "text/plain",
+			"X-Robots-Tag": "noindex, nofollow",
 		},
 	});
 }

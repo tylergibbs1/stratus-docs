@@ -5,7 +5,7 @@ export default function robots(): MetadataRoute.Robots {
 		rules: {
 			userAgent: "*",
 			allow: "/",
-			disallow: ["/api/", "/_next/", "/*.mdx"],
+			disallow: ["/api/", "/_next/"],
 		},
 		sitemap: "https://usestratus.dev/sitemap.xml",
 		host: "https://usestratus.dev",
